@@ -83,7 +83,7 @@ body {
   box-shadow: 0 3px 14px rgba(139,26,26,0.45);
   border-bottom: 3px solid #c8a96e;
 }
-.header-title { font-family: var(--sans); font-size: 18px; font-weight: 800; color: white; letter-spacing: 0.1px; }
+.header-title { font-family: var(--sans); font-size: 20px; font-weight: 900; color: white; letter-spacing: -0.3px; }
 .header-sub { font-size: 12px; color: rgba(255,255,255,0.75); margin-top: 3px; }
 .header-fecha { font-family: var(--mono); font-size: 14px; color: #ffd580; font-weight: 700; }
 .header-stats { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 3px; text-align:right; }
@@ -580,7 +580,6 @@ body {
   border-radius: 10px; font-size: 10px; font-weight: 800;
   padding: 1px 6px; margin-left: 5px;
 }
-</style>
 .btn-ia {
   width: 100%; padding: 15px; margin-top: 8px;
   background: linear-gradient(135deg, #1a3a8f 0%, #1a56db 60%, #2872f5 100%);
@@ -631,11 +630,17 @@ body {
 
 <div class="header">
   <div style="display:flex;align-items:center;gap:8px">
-    <svg width="22" height="28" viewBox="0 0 22 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M13 1L1 16H10L9 27L21 12H12L13 1Z" fill="white" stroke="rgba(255,220,0,0.9)" stroke-width="1.2" stroke-linejoin="round"/>
+    <svg width="26" height="30" viewBox="0 0 42 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Escudo Pycseca -->
+      <path d="M21 2 L39 8 L39 26 C39 36 30 43 21 46 C12 43 3 36 3 26 L3 8 Z" fill="white" fill-opacity="0.15" stroke="white" stroke-width="2"/>
+      <path d="M21 6 L36 11 L36 26 C36 34 28 40 21 43 C14 40 6 34 6 26 L6 11 Z" fill="white" fill-opacity="0.1"/>
+      <!-- Líneas diagonales estilo Pycseca -->
+      <line x1="10" y1="22" x2="32" y2="14" stroke="#f5c518" stroke-width="3" stroke-linecap="round"/>
+      <line x1="10" y1="28" x2="32" y2="20" stroke="white" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+      <line x1="10" y1="34" x2="32" y2="26" stroke="#f5c518" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
     </svg>
     <div>
-      <div class="header-title">Libreta</div>
+      <div class="header-title" style="color:rgba(255,220,80,0.95)">PycLibreta</div>
       <div class="header-sub">Valencia 08:00 → Almassera</div>
     </div>
   </div>
@@ -804,276 +809,129 @@ let iaEnriqueciendo = false;   // true mientras Claude está procesando
 let iaResumen = '';            // resumen del día generado por IA
 
 
-const ZONA_NOMBRE = { '1':'Valencia ciudad', '2':'L\'Horta Nord', '3':'Camp de Túria · Interior', '4':'L\'Horta Sud · Ribera', '5':'Ribera Alta · Safor', '6':'Castellón · Norte' };
+const ZONA_NOMBRE = {
+  '1': 'Valencia ciudad',
+  '2': "L'Horta Nord",
+  '3': "L'Horta Oest",
+  '4': "L'Horta Sud",
+  '5': 'Ribera Alta · Safor',
+  '6': 'Castellón · Norte',
+  '7': 'Requena · Utiel',
+  '8': 'Cuenca · Albacete',
+  '9': 'Camp de Túria'
+};
 
 const ZONA_MUNICIPIOS = {
-  "ademuz": "3",
-  "ador": "5",
-  "aielo de malferit": "5",
-  "alacuás": "4",
-  "alaquas": "4",
-  "albaida": "5",
-  "albal": "4",
-  "albalat de la ribera": "4",
-  "albalat dels sorells": "2",
-  "alberic": "5",
-  "alberique": "5",
-  "albocasser": "6",
-  "alborache": "5",
-  "alboraia/alboraya": "2",
-  "alboraya": "2",
-  "albuixech": "2",
-  "alcala de xivert": "6",
-  "alcalà de xivert": "6",
-  "alcantera de xuquer": "5",
-  "alcasser": "4",
-  "alcira": "5",
-  "alcora": "6",
-  "alcublas": "3",
-  "alcúdia, ii": "4",
-  "alcúdia, l": "4",
-  "aldaia": "4",
-  "alfafar": "4",
-  "alfarp": "4",
-  "algemesi": "4",
-  "alginet": "5",
-  "almacera": "2",
-  "almassera": "2",
-  "almazora": "6",
-  "almenara": "6",
-  "almusafes": "4",
-  "almussafes": "4",
-  "almàssera": "2",
-  "alzira": "5",
-  "anna": "5",
-  "antella": "5",
-  "artana": "6",
-  "ayora": "5",
-  "belgida": "5",
-  "bellreguard": "5",
-  "benaguacil": "3",
-  "benaguasil": "3",
-  "benassal": "6",
-  "benetusser": "4",
-  "benicarlo": "6",
-  "benicasim": "6",
-  "benifaio": "4",
-  "benifairo dels vals": "2",
-  "benifaió": "4",
-  "beniganim": "5",
-  "benigánim": "5",
-  "benimodo": "5",
-  "benlloch": "6",
-  "betera": "2",
-  "bicorp": "5",
-  "bocairent": "5",
-  "bolbaite": "5",
-  "bonrepos i mirambell": "2",
-  "borriana": "6",
-  "borriana/burriana": "6",
-  "borriol": "6",
-  "bugarra": "3",
-  "buggiana": "6",
-  "burjasot": "2",
-  "burjassot": "2",
-  "burriana": "6",
-  "buñol": "3",
-  "bétera": "2",
-  "cabanes": "6",
-  "camporrobles": "3",
-  "canals": "5",
-  "canet d'en berenguer": "2",
-  "canet lo roig": "6",
-  "carcaixent": "5",
-  "carlet": "5",
-  "carpesa": "2",
-  "casas ibañez": "3",
-  "casinos": "3",
-  "castello de rugat": "5",
-  "castellón": "6",
-  "catadau": "4",
-  "catarroja": "4",
-  "cati": "6",
-  "caudete": "3",
-  "caudete de las fuentes": "3",
-  "chelva": "3",
-  "cheste": "3",
-  "chilches/xilxes": "6",
-  "chiva": "3",
-  "cinctorres": "6",
-  "cofrentes": "3",
-  "corbera de alzira": "4",
-  "costur": "6",
-  "cuevas utiel": "3",
-  "culla": "6",
-  "cullera": "4",
-  "daimús": "5",
-  "denia": "5",
-  "el palmar": "4",
-  "el perello": "4",
-  "el puig": "2",
-  "el puig de santa maria": "2",
-  "estivella": "2",
-  "favara": "4",
-  "figueroles": "6",
-  "foios": "2",
-  "font d'en carròs, la": "5",
-  "fontanars dels alforins": "5",
-  "forcall": "6",
-  "gandia": "5",
-  "gandía": "5",
-  "gavarda": "4",
-  "genoves": "5",
-  "godella": "2",
-  "godelleta": "3",
-  "grao de gandia": "5",
-  "guadassuar": "4",
-  "higueruelas": "3",
-  "iniesta": "3",
-  "jarafuel": "3",
-  "jerica": "6",
-  "l'eliana": "3",
-  "l'olleria": "5",
-  "la alcudia": "5",
-  "la cañada": "3",
-  "la eliana": "3",
-  "la font de la figuera": "5",
-  "la llosa": "6",
-  "la olleria": "5",
-  "la pobla de farnals": "2",
-  "la pobla de vallbona": "3",
-  "la pobla del duc": "5",
-  "la pobla llarga": "5",
-  "la pobla tornesa": "6",
-  "la salzadella": "6",
-  "la vall d'uixo": "6",
-  "la vilavella": "6",
-  "llauri": "4",
-  "lliria": "3",
-  "llombai": "4",
-  "llosa de ranes": "5",
-  "llutxent": "5",
-  "loriguilla": "3",
-  "lucena del cid": "6",
-  "l´eliana": "3",
-  "manises": "3",
-  "manuel": "5",
-  "masamagrell": "2",
-  "massalfassar": "2",
-  "massamagrell": "2",
-  "massanassa": "4",
-  "meliana": "2",
-  "minglanilla": "3",
-  "mislata": "3",
-  "mogente/moixent": "5",
-  "moncada": "2",
-  "moncofa": "6",
-  "montanejos": "6",
-  "montaverner": "5",
-  "montesa": "5",
-  "montroi/montroy": "3",
-  "montserrat": "3",
-  "morella": "6",
-  "museros": "2",
-  "naquera": "2",
-  "navarres": "5",
-  "nules": "6",
-  "oliva": "5",
-  "onda": "6",
-  "onteniente": "5",
-  "ontinyent": "5",
-  "oropesa": "6",
-  "oropesa del mar": "6",
-  "paiporta": "4",
-  "paterna": "2",
-  "pedralba": "3",
-  "peñiscola": "6",
-  "picanya": "4",
-  "picassent": "4",
-  "picaña": "4",
-  "pinedo": "4",
-  "pobla de vallbona": "3",
-  "pobla llarga": "5",
-  "puerto de sagunto": "2",
-  "puerto sagunto": "2",
-  "puzol": "2",
-  "puçol": "2",
-  "quart de poblet": "3",
-  "quatretonda": "5",
-  "quintanar del rey": "3",
-  "rafelbunyol": "2",
-  "rafelbuñol": "2",
-  "real": "3",
-  "requena": "3",
-  "riba-roja de turia": "3",
-  "riba-roja de túria": "3",
-  "ribarroja del turia": "3",
-  "ribesalbes": "6",
-  "riola": "4",
-  "rocafort": "2",
-  "rossell": "6",
-  "sagunto": "2",
-  "sagunto puerto": "2",
-  "sagunto/sagunt": "2",
-  "san antonio": "3",
-  "sant joan de moro": "6",
-  "sant mateu": "6",
-  "segorbe": "2",
-  "serra": "2",
-  "sierra engarceran": "6",
-  "siete aguas": "3",
-  "silla": "4",
-  "simat de la valldigna": "4",
-  "sinarcas": "3",
-  "sollana": "4",
-  "soneja": "6",
-  "sueca": "4",
-  "sumacarcer": "5",
-  "tabernes blanques": "2",
-  "tabernes de valdigna": "5",
-  "talayuelas": "3",
-  "tales": "6",
-  "tavernes blanques": "2",
-  "tavernes de la valldigna": "4",
-  "titaguas": "3",
-  "torreblanca": "6",
-  "torrent": "3",
-  "traiguera": "6",
-  "tuejar": "3",
-  "turis": "3",
-  "useras/les useres": "6",
-  "utiel": "3",
+  // Valencia ciudad
   "valencia": "1",
-  "valencia bonaire": "3",
-  "vall d'alba": "6",
-  "vall d'uixo": "6",
-  "vall d'uixó, la": "6",
-  "vall d´uxo": "6",
-  "vallada": "5",
-  "venta del moro": "3",
-  "vila-real": "6",
-  "vilafames": "6",
-  "vilamarxant": "3",
-  "vilavella": "6",
-  "villafames": "6",
-  "villafranca del cid": "6",
-  "villahermosa del rio": "6",
-  "villamalea": "3",
-  "villamarchante": "3",
-  "villanueva de castellon": "5",
-  "villanueva de castellón": "5",
-  "villar del arzobispo": "3",
-  "villareal": "6",
-  "vinalesa": "2",
-  "vinaros": "6",
-  "vinaroz": "6",
-  "vinaròs": "6",
-  "vistabella del maestrat": "6",
-  "viver": "6",
-  "xativa": "5",
-  "xeraco": "5",
-  "xirivella": "4",
-  "yatova": "5"
+  "valencia bonaire": "1",
+
+  // L'Horta Nord
+  "albalat dels sorells": "2", "alboraia": "2", "alboraya": "2", "albuixech": "2",
+  "almacera": "2", "almassera": "2", "almàssera": "2",
+  "betera": "2", "bétera": "2", "bonrepos i mirambell": "2",
+  "burjasot": "2", "burjassot": "2",
+  "canet d'en berenguer": "2", "carpesa": "2", "el puig": "2", "el puig de santa maria": "2",
+  "estivella": "2", "foios": "2", "godella": "2",
+  "la pobla de farnals": "2", "masamagrell": "2", "massalfassar": "2", "massamagrell": "2",
+  "meliana": "2", "moncada": "2", "museros": "2", "naquera": "2",
+  "paterna": "2", "puerto de sagunto": "2", "puerto sagunto": "2", "puzol": "2", "puçol": "2",
+  "rafelbunyol": "2", "rafelbuñol": "2", "rocafort": "2", "sagunto": "2",
+  "sagunto puerto": "2", "sagunto/sagunt": "2", "segorbe": "2", "serra": "2",
+  "tabernes blanques": "2", "tavernes blanques": "2", "vinalesa": "2",
+  "benifairo dels vals": "2",
+
+  // L'Horta Oest
+  "aldaia": "3", "l'eliana": "3", "la eliana": "3", "l´eliana": "3",
+  "manises": "3", "mislata": "3", "quart de poblet": "3",
+  "riba-roja de turia": "3", "riba-roja de túria": "3", "ribarroja del turia": "3",
+  "vilamarxant": "3", "villamarchante": "3",
+
+  // L'Horta Sud
+  "alacuás": "4", "alaquas": "4", "albal": "4", "albalat de la ribera": "4",
+  "alcasser": "4", "alfafar": "4", "alfarp": "4",
+  "algemesi": "4", "almussafes": "4", "almusafes": "4",
+  "benetusser": "4", "benifaio": "4", "benifaió": "4",
+  "catadau": "4", "catarroja": "4", "corbera de alzira": "4",
+  "cullera": "4", "el palmar": "4", "el perello": "4",
+  "favara": "4", "gavarda": "4", "guadassuar": "4",
+  "llauri": "4", "llombai": "4", "massanassa": "4",
+  "paiporta": "4", "picanya": "4", "picassent": "4", "picaña": "4",
+  "pinedo": "4", "riola": "4", "silla": "4",
+  "simat de la valldigna": "4", "sollana": "4", "sueca": "4",
+  "tavernes de la valldigna": "4", "xirivella": "4",
+  "alcúdia, ii": "4", "alcúdia, l": "4",
+
+  // Ribera Alta · Safor
+  "ador": "5", "aielo de malferit": "5", "albaida": "5",
+  "alberic": "5", "alberique": "5", "alborache": "5",
+  "alcira": "5", "alginet": "5", "alzira": "5", "anna": "5", "antella": "5",
+  "ayora": "5", "belgida": "5", "bellreguard": "5",
+  "benigánim": "5", "beniganim": "5", "benimodo": "5",
+  "bicorp": "5", "bocairent": "5", "bolbaite": "5",
+  "canals": "5", "carcaixent": "5", "carlet": "5",
+  "castello de rugat": "5", "daimús": "5", "denia": "5",
+  "font d'en carròs, la": "5", "fontanars dels alforins": "5",
+  "gandia": "5", "gandía": "5", "grao de gandia": "5",
+  "genoves": "5", "la alcudia": "5",
+  "la font de la figuera": "5", "l'olleria": "5", "la olleria": "5",
+  "la pobla del duc": "5", "la pobla llarga": "5",
+  "llosa de ranes": "5", "llutxent": "5",
+  "manuel": "5", "mogente/moixent": "5", "montaverner": "5",
+  "montesa": "5", "navarres": "5", "oliva": "5",
+  "onteniente": "5", "ontinyent": "5", "pobla llarga": "5",
+  "quatretonda": "5", "sumacarcer": "5",
+  "tabernes de valdigna": "5", "vallada": "5",
+  "villanueva de castellon": "5", "villanueva de castellón": "5",
+  "xativa": "5", "xeraco": "5", "yatova": "5",
+
+  // Castellón · Norte
+  "albocasser": "6", "alcala de xivert": "6", "alcalà de xivert": "6",
+  "alcora": "6", "almazora": "6", "almenara": "6",
+  "artana": "6", "benassal": "6", "benicarlo": "6", "benicasim": "6",
+  "benlloch": "6", "borriana": "6", "borriana/burriana": "6",
+  "borriol": "6", "burriana": "6", "buggiana": "6",
+  "cabanes": "6", "canet lo roig": "6", "castellón": "6",
+  "cati": "6", "chilches/xilxes": "6", "cinctorres": "6",
+  "costur": "6", "culla": "6", "figueroles": "6",
+  "forcall": "6", "jerica": "6", "la llosa": "6",
+  "la pobla tornesa": "6", "la salzadella": "6",
+  "la vall d'uixo": "6", "la vilavella": "6",
+  "lucena del cid": "6", "moncofa": "6", "montanejos": "6",
+  "morella": "6", "nules": "6", "onda": "6",
+  "oropesa": "6", "oropesa del mar": "6", "peñiscola": "6",
+  "ribesalbes": "6", "rossell": "6", "sant joan de moro": "6",
+  "sant mateu": "6", "sierra engarceran": "6", "soneja": "6",
+  "tales": "6", "torreblanca": "6", "traiguera": "6",
+  "useras/les useres": "6", "vall d'alba": "6", "vall d'uixo": "6",
+  "vall d'uixó, la": "6", "vall d´uxo": "6",
+  "vila-real": "6", "vilafames": "6", "villafranca del cid": "6",
+  "villahermosa del rio": "6", "villareal": "6",
+  "vinaros": "6", "vinaroz": "6", "vinaròs": "6",
+  "vistabella del maestrat": "6", "viver": "6",
+
+  // Requena · Utiel (zona 7 — nueva)
+  "buñol": "7", "camporrobles": "7", "cheste": "7",
+  "chiva": "7", "cofrentes": "7", "cuevas utiel": "7",
+  "godelleta": "7", "loriguilla": "7", "montroi/montroy": "7",
+  "montserrat": "7", "requena": "7", "siete aguas": "7",
+  "sinarcas": "7", "torrent": "7", "torrente": "7", "turis": "7",
+  "utiel": "7", "venta del moro": "7",
+
+  // Cuenca · Albacete (zona 8 — nueva)
+  "casas ibañez": "8", "minglanilla": "8", "quintanar del rey": "8",
+  "iniesta": "8", "villamalea": "8", "caudete": "8",
+  "caudete de las fuentes": "8", "talayuelas": "8",
+  "ademuz": "8", "jarafuel": "8", "ayora": "8",
+
+  // Camp de Túria (zona 9 — nueva)
+  "benaguacil": "9", "benaguasil": "9", "bugarra": "9",
+  "casinos": "9", "chelva": "9", "higueruelas": "9",
+  "la cañada": "9", "la pobla de vallbona": "9",
+  "lliria": "9", "pedralba": "9", "pobla de vallbona": "9",
+  "real": "9", "san antonio": "9", "titaguas": "9",
+  "tuejar": "9", "villar del arzobispo": "9",
+  "alcublas": "9"
 };
 
 
@@ -1193,6 +1051,30 @@ function updateStats(){
 // ============================================================
 // RENDER ANÁLISIS
 // ============================================================
+// ============================================================
+// COLOR POR CLIENTE
+// ============================================================
+function getColorCliente(nombre){
+  const n = (nombre||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  // BBVA — azul
+  if(/bbva|bilbao|vizcaya/.test(n)) return { border:'#004A97', bg:'#f0f5ff', txt:'#004A97' };
+  // Sprinter — gris oscuro
+  if(/sprinter|esprinter/.test(n)) return { border:'#1a1a1a', bg:'#f5f5f5', txt:'#1a1a1a' };
+  // Supermercados Día — rojo vivo
+  if(/\bdia\b|supermercado.*dia|dia.*super/.test(n)) return { border:'#E30613', bg:'#fff0f0', txt:'#E30613' };
+  // Repsol — amarillo oscuro
+  if(/repsol/.test(n)) return { border:'#c49900', bg:'#fffbe0', txt:'#a07800' };
+  // Plenergy — verde eléctrico
+  if(/plenergy/.test(n)) return { border:'#00A651', bg:'#f0fdf5', txt:'#007a3d' };
+  // Orange
+  if(/\borange\b/.test(n)) return { border:'#FF6600', bg:'#fff5ee', txt:'#cc5200' };
+  // Cajamar / Caja Rural / Ruralcaja / cualquier banco/caja que no sea BBVA
+  if(/cajamar|caja rural|ruralcaja|caixa rural|caja.*rural|rural.*caja|cajamar|globalcaja|unicaja|bankia|sabadell|santander|caixabank|ibercaja|kutxa|bankinter|caixa/.test(n))
+    return { border:'#2d7a3a', bg:'#f0fdf4', txt:'#1a5c28' };
+  // Default — rojo Pycseca
+  return { border:'var(--accent)', bg:'var(--accent-light)', txt:'var(--accent)' };
+}
+
 function renderAnalisis(c){
   let h = '<div class="section-pad">';
 
@@ -1262,13 +1144,34 @@ function renderAnalisis(c){
       const badgeTip   = sinNada ? 'Sin alertas' : `${numAlertas} alerta${numAlertas>1?'s':''}`;
 
       const isOpen = analisisAbiertos.has(i);
+      const cc = getColorCliente(a.cliente);
 
-      h += `<div class="analisis-card">
-        <div class="analisis-header" onclick="toggleAnalisis(${i})" style="cursor:pointer">
-          <div class="num-badge">${i+1}</div>
+      // Badge prioridad
+      const prio = a._prioridad||'';
+      const prioBadge = prio ? (() => {
+        const p = prio.replace(/\s/g,'');
+        const bg = p==='4H'||p==='8H' ? '#dc2626' : p==='12H'||p==='24H' ? '#ea580c' :
+                   p==='NODEF' ? '#6b7280' : '#2563eb';
+        return `<span style="background:${bg};color:white;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;font-family:var(--mono)">${p}</span>`;
+      })() : '';
+
+      // Badge sustituciones
+      const sustBadge = a._nSust ? `<span style="background:#ea580c;color:white;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;font-family:var(--mono)">🧯${a._nSust} SUST</span>` : '';
+
+      // Badge revisiones
+      const revBadge = a._nRevTrim ? `<span style="background:#0284c7;color:white;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;font-family:var(--mono)">${a._nRevTrim} REV TRIM</span>` :
+                       a._nRevSem  ? `<span style="background:#0284c7;color:white;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;font-family:var(--mono)">${a._nRevSem} REV SEM</span>` :
+                       a._nRevAnual? `<span style="background:#0284c7;color:white;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;font-family:var(--mono)">${a._nRevAnual} REV ANU</span>` : '';
+
+      h += `<div class="analisis-card" style="border-left:4px solid ${cc.border};background:white">
+        <div class="analisis-header" onclick="toggleAnalisis(${i})" style="cursor:pointer;background:${cc.bg};border-radius:8px 8px 0 0">
+          <div class="num-badge" style="background:${cc.border}">${i+1}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px;letter-spacing:0.1px">${a.cliente}${a.oficina?` <span style="font-weight:500;color:var(--text2);font-size:13px">· ${a.oficina}</span>`:''}</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:1px">${a.localidad||'—'}</div>
+            <div style="font-weight:700;font-size:14px;letter-spacing:0.1px;color:${cc.txt}">${a.cliente}${a.oficina?` <span style="font-weight:500;color:var(--text2);font-size:13px">· ${a.oficina}</span>`:''}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:1px;display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+              <span>${a.localidad||'—'}</span>
+              ${prioBadge}${sustBadge}${revBadge}
+            </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">${a.sistema}</div>
@@ -1281,8 +1184,14 @@ function renderAnalisis(c){
           <div style="font-size:13px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:5px">
             <span style="opacity:0.6">📍</span> ${a.direccion||'—'}
           </div>
-          ${a.trabajo ? `<div style="font-size:13px;color:var(--text);background:rgba(220,38,38,0.06);border-left:3px solid var(--accent);padding:6px 10px;border-radius:0 6px 6px 0;margin-bottom:7px;line-height:1.4">${a.trabajo}</div>` : ''}
-          <span class="aviso-pill">${a.aviso||'Sin nº aviso'}</span>
+          ${a.trabajo ? `<div style="font-size:14px;font-weight:500;color:#1a1a2e;background:#fff0f0;border-left:4px solid ${cc.border};padding:8px 12px;border-radius:0 8px 8px 0;margin-bottom:8px;line-height:1.5">${a.trabajo}</div>` : ''}
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="aviso-pill">${a.aviso||'Sin nº aviso'}</span>
+            ${a._fechaFijada ? `
+              <span style="background:#0ea5e9;color:white;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700">📅 ${a._fechaFijada}</span>
+              <button onclick="exportarICSAviso(${i})" style="padding:4px 10px;background:#0ea5e9;border:1.5px solid #0284c7;border-radius:8px;color:white;font-size:11px;font-weight:700;cursor:pointer">→ Outlook</button>
+            ` : ''}
+          </div>
         </div>`;
 
       // Desplegable
@@ -1698,27 +1607,28 @@ function parsearBloque(texto){
     .replace(/(\.\w{3}\))\s*([A-ZÁÉÍÓÚÑ])/g, '$1\n$2');
 
   const lineasDir = textoNorm.split(/\n/);
-  const reProv = /VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID/i;
+  const reProv = /VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA/i;
 
   // Intento 1: ) + dirección + CP + localidad + provincia — pegado en misma línea
-  let dirConCP = textoNorm.match(/\)([^)\n]+?)\s*-\s*(\d{5})\s*-\s*([A-ZÁÉÍÓÚÑA-Za-záéíóúñ\s'´\-]+?)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID)/i);
+  let dirConCP = textoNorm.match(/\)([^)\n]+?)\s*-\s*(\d{5})\s*-\s*([A-ZÁÉÍÓÚÑA-Za-záéíóúñ\s'´\-]+?)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)/i);
 
   // Intento 2: línea propia con dirección + CP + localidad + provincia
   let dirLineaCP = null;
   for(const linea of lineasDir){
-    const m = linea.match(/^(.+?)\s*-\s*(\d{5})\s*-\s*([A-ZÁÉÍÓÚÑA-Za-záéíóúñ\s'´\-]+?)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID)/i);
+    const m = linea.match(/^(.+?)\s*-\s*(\d{5})\s*-\s*([A-ZÁÉÍÓÚÑA-Za-záéíóúñ\s'´\-]+?)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)/i);
     if(m && !m[1].match(/sistema|AVERÍA|MANT|SEGURIDAD|OT-/i)){
       dirLineaCP = m; break;
     }
   }
 
   // Intento 3: ) + dirección + localidad + provincia (sin CP — Higueruelas)
-  const dirSinCP = textoNorm.match(/\)([^)\n]{3,50}?)\s*-\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ']+(?:\s[A-ZÁÉÍÓÚÑa-záéíóúñ']+)*)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID)/i);
+  // También captura "Valencia/Valencià" cortando en la barra
+  const dirSinCP = textoNorm.match(/\)([^)\n]{3,50}?)\s*-\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ']+(?:\s[A-ZÁÉÍÓÚÑa-záéíóúñ']+)*)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)/i);
 
-  // Intento 4: línea propia sin CP — "LA SERRANIA 2 - Higueruelas - VALENCIA"
+  // Intento 4: línea propia sin CP
   let dirLineaSinCP = null;
   for(const linea of lineasDir){
-    const m = linea.match(/^([A-ZÁÉÍÓÚÑ][^\n]{3,50}?)\s*-\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s[A-ZÁÉÍÓÚÑa-záéíóúñ]+)*)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID)/i);
+    const m = linea.match(/^([A-ZÁÉÍÓÚÑ][^\n]{3,50}?)\s*-\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s[A-ZÁÉÍÓÚÑa-záéíóúñ]+)*)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)/i);
     if(m && !m[1].match(/sistema|AVERÍA|MANT|SEGURIDAD|OT-|INC\d/i) && m[1].length > 3){
       dirLineaSinCP = m; break;
     }
@@ -1729,8 +1639,12 @@ function parsearBloque(texto){
     .replace(/^PLZ\.\s*/i,'Plz. ').replace(/^CAMINO\s+/i,'Cno. ')
     .replace(/\.\s{2,}/g,', ').replace(/\s+/g,' ').trim();
   const limpiarLoc = l => {
-    const s = l.trim().replace(/[´`']/g,"'");
-    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    // Cortar en "/" si viene "Valencia/Valencià"
+    const s = l.split('/')[0].trim().replace(/[´`']/g,"'");
+    // Normalizar TORRENTE → Torrent
+    const norm = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    if(/^torrente$/i.test(norm)) return 'Torrent';
+    return norm;
   };
 
   if(dirConCP){
@@ -1760,15 +1674,21 @@ function parsearBloque(texto){
         .replace(/\s*NODEF.*/i,'')
         .replace(/\s*----+.*/,'')
         .replace(/CGA-[^:]+:\s*/i,'')
-        .trim().substring(0,100);
+        // Quitar etiquetas finales: "4 H", "Avería", "Instalación", "Revisión anual", "1 RET", "9 REV TRIM"
+        .replace(/\n+\d+\s*H\b.*/i,'')
+        .replace(/\n+(Avería|Instalación|Revisión anual|Mantenimiento|NODEF|RET|REV TRIM).*/i,'')
+        .trim().substring(0,120);
     }
   } else {
-    // Sin INC: Aquae, Sprinter, mantenimientos
-    // Buscar texto libre tras VALENCIA (Aquae) o en líneas de descripción
-    const mLibre = texto.match(/VALENCIA([a-záéíóúñ].{10,})/i);
-    // Tipo de aviso completo: MANT. TRIMESTRAL de P.C.I. / MANT. ANUAL de SEGURIDAD
+    // Sin INC: Aquae, Sprinter, mantenimientos, instalaciones BBVA sin INC
+    // Buscar descripción después de la dirección
+    const mSust = texto.match(/(?:SUSTITUCION|INSTALACION|CAMBIO|RETIRAR|RETIRADO)[^\n]{5,}/i);
+    const mLibre = texto.match(/VALENCIA[\/A-ZÁ]*\s*\n([a-záéíóúñA-ZÁÉÍÓÚÑ].{10,})/i);
     const mTipo = texto.match(/^(MANT\.\s+[\w\.]+\s+de\s+[\w\.\s]+?)(?:\s+de\s+sistema|\n|$)/im);
-    if(mLibre) a.trabajo = mLibre[1].replace(/\s*NODEF.*/i,'').trim().substring(0,100);
+    const mProblema = texto.match(/(?:problemas?\s+con|fallo|sin\s+comunicaci)[^\n]{5,}/i);
+    if(mSust) a.trabajo = mSust[0].replace(/\s*NODEF.*/i,'').trim().substring(0,120);
+    else if(mLibre) a.trabajo = mLibre[1].replace(/\s*NODEF.*/i,'').trim().substring(0,100);
+    else if(mProblema) a.trabajo = mProblema[0].trim().substring(0,100);
     else if(mTipo) a.trabajo = mTipo[1].trim();
   }
 
@@ -1781,9 +1701,14 @@ function parsearBloque(texto){
     if(/BANCO BILBAO|BBVA/i.test(raw)) a.cliente='BBVA';
     else if(/CAJAMAR/i.test(raw)) a.cliente='CAJAMAR';
     else if(/CAJA RURAL DE VILLAR|CAJAR RUAL/i.test(raw)) a.cliente='Caja Rural Villar';
+    else if(/CAIXA RURAL TORRENT/i.test(raw)) a.cliente='Caixa Rural Torrent';
     else if(/CAIXA RURAL/i.test(raw)) a.cliente='Caixa Rural';
+    else if(/CAJA RURAL/i.test(raw)) a.cliente='Caja Rural';
     else if(/AQUAE/i.test(raw)) a.cliente='Aquae Security';
-    else if(/SPRINTER/i.test(raw)) a.cliente='Sprinter';
+    else if(/SPRINTER|ESPRINTER/i.test(raw)) a.cliente='Sprinter';
+    else if(/REPSOL/i.test(raw)) a.cliente='Repsol';
+    else if(/PLENERGY/i.test(raw)) a.cliente='Plenergy';
+    else if(/\bDIA\b/i.test(raw)) a.cliente='Supermercados Día';
     else {
       // Tomar máx 3 palabras, limpiar S.L., S.A., etc.
       a.cliente = raw.replace(/,?\s*S\.[AL]\.\s*$/i,'').split(/\s+/).slice(0,3).join(' ');
@@ -1892,6 +1817,27 @@ function parsearBloque(texto){
   if(/REITERADO|reiterado/i.test(texto) && !a.alertas.some(al=>al.tipo==='historial')){
     a.alertas.push({tipo:'warn', emoji:'⚠️', titulo:'REITERADO', msg:'Marcado como reiterado en el aviso'});
   }
+
+  // ── PRIORIDAD (badge) ─────────────────────────────────────
+  // Detecta: "4 H", "8 H", "12 H", "NODEF", "48 H", "72 H"...
+  const mPrio = texto.match(/^\s*(NODEF|\d+\s*H|\d+\s*DIA[S]?)\s*$/mi);
+  if(mPrio){
+    const p = mPrio[1].replace(/\s+/g,'').toUpperCase();
+    a._prioridad = p;
+  }
+
+  // ── SUSTITUCIONES (extintores caducados) ─────────────────
+  // Detecta: "2 SUST", "1 SUST"
+  const mSust = texto.match(/^\s*(\d+)\s*SUST\b/mi);
+  if(mSust) a._nSust = parseInt(mSust[1]);
+
+  // ── REV TRIM / REV SEM / REV anual ───────────────────────
+  const mRevTrim = texto.match(/^\s*(\d+)\s*REV\s*TRIM\b/mi);
+  const mRevSem  = texto.match(/^\s*(\d+)\s*REV\s*SEM\b/mi);
+  const mRevAnual= texto.match(/^\s*(\d+)\s*REV\b(?!\s*TRIM|\s*SEM)/mi);
+  if(mRevTrim) a._nRevTrim = parseInt(mRevTrim[1]);
+  if(mRevSem)  a._nRevSem  = parseInt(mRevSem[1]);
+  if(mRevAnual && !mRevTrim && !mRevSem) a._nRevAnual = parseInt(mRevAnual[1]);
 
   return a;
 }
@@ -3460,6 +3406,21 @@ function renderDireccion(c){
 
   const wazePycseca = `https://waze.com/ul?q=${encodeURIComponent('Carrer de Nicolás Estevanez 3 Valencia España')}&navigate=yes`;
   const wazeAlmassera = `https://waze.com/ul?q=${encodeURIComponent('Almassera Valencia España')}&navigate=yes`;
+  const gmapsPycseca = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent('Carrer de Nicolás Estevanez 3 Valencia España')}`;
+  const gmapsAlmassera = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent('Almassera Valencia España')}`;
+
+  const navBtns = (wazeUrl, gmapsUrl) => `
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+      <a href="${wazeUrl}" target="_blank" style="text-decoration:none">
+        <button class="waze-btn"><svg width="16" height="16" viewBox="0 0 64 64" fill="none"><ellipse cx="32" cy="30" rx="28" ry="26" fill="#33CCFF"/><path d="M32 56c-2 0-4-1-5-3l-3-5C12 44 6 37 6 30 6 17 18 8 32 8s26 9 26 22c0 7-6 14-18 18l-3 5c-1 2-3 3-5 3z" fill="white"/><circle cx="24" cy="30" r="4" fill="#33CCFF"/><circle cx="40" cy="30" r="4" fill="#33CCFF"/><path d="M24 38 Q32 44 40 38" stroke="#33CCFF" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg> Waze</button>
+      </a>
+      <a href="${gmapsUrl}" target="_blank" style="text-decoration:none">
+        <button style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:#4285F4;border:2px solid #2a6de0;border-radius:10px;color:white;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          Maps
+        </button>
+      </a>
+    </div>`;
 
   const wazeBtn = (url) => `<a href="${url}" target="_blank" style="text-decoration:none">
     <button class="waze-btn"><svg width="18" height="18" viewBox="0 0 64 64" fill="none"><ellipse cx="32" cy="30" rx="28" ry="26" fill="#33CCFF"/><path d="M32 56c-2 0-4-1-5-3l-3-5C12 44 6 37 6 30 6 17 18 8 32 8s26 9 26 22c0 7-6 14-18 18l-3 5c-1 2-3 3-5 3z" fill="white"/><circle cx="24" cy="30" r="4" fill="#33CCFF"/><circle cx="40" cy="30" r="4" fill="#33CCFF"/><path d="M24 38 Q32 44 40 38" stroke="#33CCFF" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg> Waze</button>
@@ -3475,7 +3436,7 @@ function renderDireccion(c){
       <div class="dir-address">C/ Nicolás Estevanez, 3</div>
       <div class="dir-loc" style="color:#0d1b3e;font-weight:700;font-size:10px">🟢 SALIDA · Valencia</div>
     </div>
-    ${wazeBtn(wazePycseca)}
+    ${navBtns(wazePycseca, gmapsPycseca)}
   </div>`;
 
   if(avisos.length===0){
@@ -3485,6 +3446,7 @@ function renderDireccion(c){
       const done=f.estado==='Finalizado';
       const q=encodeURIComponent(`${f.direccion||''} ${f.localidad||''} Valencia España`);
       const waze=`https://waze.com/ul?q=${q}&navigate=yes`;
+      const gmaps=`https://www.google.com/maps/dir/?api=1&destination=${q}`;
       h+=`<div class="dir-card">
         <div class="dir-num ${done?'done':''}">${done?'✓':idx+1}</div>
         <div class="dir-info">
@@ -3492,9 +3454,7 @@ function renderDireccion(c){
           <div class="dir-address">${f.direccion||'—'}</div>
           <div class="dir-loc">${f.localidad||''}</div>
         </div>
-        <a href="${waze}" target="_blank" style="text-decoration:none">
-          <button class="waze-btn"><svg width="18" height="18" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="30" rx="28" ry="26" fill="#33CCFF"/><ellipse cx="32" cy="30" rx="28" ry="26" fill="url(#wg)" opacity="0.3"/><path d="M32 56c-2 0-4-1-5-3l-3-5C12 44 6 37 6 30 6 17 18 8 32 8s26 9 26 22c0 7-6 14-18 18l-3 5c-1 2-3 3-5 3z" fill="white"/><circle cx="24" cy="30" r="4" fill="#33CCFF"/><circle cx="40" cy="30" r="4" fill="#33CCFF"/><path d="M24 38 Q32 44 40 38" stroke="#33CCFF" stroke-width="2.5" stroke-linecap="round" fill="none"/><defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="transparent"/></linearGradient></defs></svg> Waze</button>
-        </a>
+        ${navBtns(waze, gmaps)}
       </div>`;
     });
   }
@@ -3507,7 +3467,7 @@ function renderDireccion(c){
       <div class="dir-address">Almassera</div>
       <div class="dir-loc" style="color:#1a4a2e;font-weight:700;font-size:10px">🔴 LLEGADA · Valencia</div>
     </div>
-    ${wazeBtn(wazeAlmassera)}
+    ${navBtns(wazeAlmassera, gmapsAlmassera)}
   </div>`;
 
   h+='</div>';
@@ -4494,6 +4454,39 @@ function copiarContextoPortapapeles(){
 // ============================================================
 // EXPORTAR .ICS PARA OUTLOOK
 // ============================================================
+// Exportar .ics desde tarjeta de análisis (aviso con fecha fijada)
+function exportarICSAviso(idx){
+  const a = analisisResultado[idx];
+  if(!a || !a._fechaFijada){ toast('Sin fecha fijada'); return; }
+  const [d,m,y] = a._fechaFijada.split('/');
+  const hora = '09:00';
+  const horaFin = '10:00';
+  const fmtICS = (dd,mm,yy,hh) => `${yy}${mm}${dd}T${hh.replace(':','')}00`;
+  const titulo = `${a.cliente}${a.oficina?' '+a.oficina:''} · ${a.trabajo||a.sistema||'Aviso'}`;
+  const desc = [
+    a.direccion||'', a.localidad||'',
+    a.aviso||'', a.trabajo||''
+  ].filter(Boolean).join(' — ');
+  const ics = [
+    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LibretaIA//Pycseca//ES',
+    'BEGIN:VEVENT',
+    `UID:libretaia-aviso-${a.aviso||idx}-${Date.now()}@pycseca`,
+    `DTSTART:${fmtICS(d,m,y,'09:00')}`,
+    `DTEND:${fmtICS(d,m,y,'10:00')}`,
+    `SUMMARY:${titulo}`,
+    `DESCRIPTION:${desc}`,
+    `LOCATION:${a.direccion||''} ${a.localidad||''}`,
+    'END:VEVENT','END:VCALENDAR'
+  ].join('\r\n');
+  const blob = new Blob([ics],{type:'text/calendar'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href=url; link.download=`aviso-${a.oficina||idx}.ics`;
+  document.body.appendChild(link); link.click();
+  document.body.removeChild(link); URL.revokeObjectURL(url);
+  toast('📅 Evento .ics descargado — ábrelo en Outlook');
+}
+
 function exportarICS(idx){
   const ev = eventosCalendario[idx];
   if(!ev){ toast('Evento no encontrado'); return; }
