@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LibretaIA">
+<link rel="apple-touch-icon" href="icon.jpg">
+<link rel="icon" href="icon.jpg">
 <title>LibretaIA</title>
-<meta name="theme-color" content="#991b1b">
+<meta name="theme-color" content="#7b1111">
 <link rel="manifest" href="manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -428,7 +431,156 @@ body {
 
 .divider { height: 1px; background: var(--border); margin: 12px 0; }
 
-/* ── IA ENRIQUECIMIENTO ── */
+/* ── CHAT DRAWER ── */
+.chat-drawer-overlay {
+  position: fixed; inset: 0; background: rgba(10,15,35,0.5);
+  z-index: 300; opacity: 0; pointer-events: none;
+  transition: opacity 0.3s ease; backdrop-filter: blur(3px);
+}
+.chat-drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+.chat-drawer {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: 88dvh; background: var(--bg);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.25);
+  z-index: 301; transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.chat-drawer.open { transform: translateY(0); }
+
+.chat-drawer-handle {
+  width: 40px; height: 5px; background: var(--border2);
+  border-radius: 3px; margin: 10px auto 0; flex-shrink: 0;
+}
+.chat-drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px 8px; flex-shrink: 0;
+  border-bottom: 1.5px solid var(--border);
+}
+.chat-drawer-title {
+  font-weight: 800; font-size: 15px; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.chat-drawer-close {
+  width: 32px; height: 32px; background: var(--bg3);
+  border: 1.5px solid var(--border2); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer; color: var(--text2);
+}
+.chat-fab {
+  position: fixed; bottom: 24px; right: 18px;
+  width: 54px; height: 54px;
+  background: linear-gradient(135deg, #1a3a8f, #2872f5);
+  border: 3px solid #1232a0; border-radius: 50%;
+  box-shadow: 0 6px 20px rgba(26,86,219,0.45);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; cursor: pointer; z-index: 200;
+  transition: transform 0.15s; color: white;
+}
+.chat-fab:active { transform: scale(0.9); }
+
+/* ── TAREAS REDISEÑO ── */
+.tarea-card {
+  background: white; border: 1.5px solid var(--border);
+  border-radius: 14px; margin-bottom: 8px;
+  box-shadow: 0 2px 10px rgba(100,140,200,0.1);
+  overflow: hidden; transition: box-shadow 0.15s;
+}
+.tarea-card:active { box-shadow: 0 1px 4px rgba(100,140,200,0.08); }
+.tarea-card.tipo-tarea { border-left: 4px solid var(--accent); }
+.tarea-card.tipo-evento { border-left: 4px solid #0ea5e9; }
+.tarea-card-top {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 14px; cursor: pointer;
+}
+.tarea-icon-wrap {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.tarea-icon-wrap.tipo-tarea { background: var(--accent-light); }
+.tarea-icon-wrap.tipo-evento { background: #e0f2fe; }
+.tarea-card-body {
+  display: none; padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg3);
+}
+.tarea-card-body.open { display: block; }
+.tarea-actions { display: flex; gap: 8px; margin-top: 12px; }
+.btn-alarma {
+  flex: 1; padding: 11px; background: var(--accent);
+  border: 2px solid var(--accent-dark); border-radius: 10px;
+  color: white; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.btn-ics {
+  flex: 1; padding: 11px; background: #0ea5e9;
+  border: 2px solid #0284c7; border-radius: 10px;
+  color: white; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.btn-todo {
+  flex: 1; padding: 11px; background: #2563eb;
+  border: 2px solid #1d4ed8; border-radius: 10px;
+  color: white; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.btn-borrar-tarea {
+  padding: 11px 14px; background: var(--bg);
+  border: 1.5px solid var(--border2); border-radius: 10px;
+  color: var(--text3); font-size: 13px; cursor: pointer;
+}
+.tareas-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 14px 8px;
+}
+.tareas-title {
+  font-weight: 800; font-size: 16px; color: var(--text);
+}
+.tareas-chips {
+  display: flex; gap: 6px; padding: 0 14px 12px; flex-wrap: wrap;
+}
+.tarea-chip {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+  border: 1.5px solid;
+}
+.chip-total { background: var(--accent-light); color: var(--accent); border-color: var(--accent-mid); }
+.chip-pendiente { background: var(--orange-light); color: var(--orange); border-color: var(--orange-mid); }
+.chip-evento { background: #e0f2fe; color: #0284c7; border-color: #bae6fd; }
+
+.fecha-grupo-label {
+  font-family: var(--mono); font-size: 11px; font-weight: 800;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  margin: 14px 0 6px; padding: 0 2px;
+  display: flex; align-items: center; gap: 8px;
+}
+.fecha-grupo-label::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.fecha-grupo-label.hoy { color: var(--accent); }
+.fecha-grupo-label.manana { color: var(--orange); }
+
+.tareas-add-bar {
+  display: flex; border-top: 2px solid var(--border);
+  background: white; flex-shrink: 0;
+}
+.tareas-add-btn {
+  flex: 1; padding: 16px 8px; border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 800; color: white;
+  transition: opacity 0.1s;
+}
+.tareas-add-btn:active { opacity: 0.8; }
+.tareas-add-btn.btn-tarea-add { background: var(--accent); border-right: 1px solid rgba(0,0,0,0.1); }
+.tareas-add-btn.btn-evento-add { background: #0ea5e9; border-right: 1px solid rgba(0,0,0,0.1); }
+.tareas-add-btn.btn-copilot-add { background: #7c3aed; }
+
+/* ── NOTIF BADGE ── */
+.notif-badge {
+  display: inline-block; background: var(--orange); color: white;
+  border-radius: 10px; font-size: 10px; font-weight: 800;
+  padding: 1px 6px; margin-left: 5px;
+}
+</style>
 .btn-ia {
   width: 100%; padding: 15px; margin-top: 8px;
   background: linear-gradient(135deg, #1a3a8f 0%, #1a56db 60%, #2872f5 100%);
@@ -582,6 +734,45 @@ body {
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- CHAT DRAWER -->
+<div class="chat-drawer-overlay" id="chatDrawerOverlay" onclick="cerrarChatDrawer()"></div>
+<div class="chat-drawer" id="chatDrawer">
+  <div class="chat-drawer-handle"></div>
+  <div class="chat-drawer-header">
+    <div class="chat-drawer-title">
+      <span style="font-size:20px">💬</span>
+      <span>Asistente IA</span>
+      <span style="font-size:11px;font-weight:500;color:var(--text3);background:var(--bg3);padding:2px 8px;border-radius:10px;border:1px solid var(--border)">con contexto</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="copiarContextoPortapapeles()" style="padding:7px 12px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer" title="Copiar contexto para Copilot">📋 Copilot</button>
+      <button onclick="resetChat()" style="padding:7px 12px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text3);cursor:pointer">🗑</button>
+      <div class="chat-drawer-close" onclick="cerrarChatDrawer()">✕</div>
+    </div>
+  </div>
+  <div id="chatDrawerMensajes" style="flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:10px"></div>
+  <div id="chatDrawerImgZone" style="display:none;padding:6px 14px;flex-shrink:0">
+    <div style="position:relative;display:inline-block">
+      <img id="chatDrawerImgSrc" style="height:60px;border-radius:8px;border:2px solid var(--accent-mid)">
+      <button onclick="quitarChatImg()" style="position:absolute;top:-6px;right:-6px;background:var(--accent);border:none;border-radius:50%;width:20px;height:20px;color:white;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+  </div>
+  <div style="padding:10px 14px max(18px,env(safe-area-inset-bottom,18px));flex-shrink:0;background:white;border-top:1.5px solid var(--border)">
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <label style="flex-shrink:0;width:40px;height:40px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;position:relative">
+        📷<input type="file" accept="image/*" onchange="adjuntarChatImg(this)" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+      </label>
+      <textarea id="chatDrawerInput" placeholder="Pregunta sobre tus avisos, historial, clientes..." rows="2"
+        style="flex:1;background:var(--bg3);border:2px solid var(--border2);border-radius:14px;padding:10px 14px;font-size:14px;font-family:var(--sans);color:var(--text);outline:none;resize:none;line-height:1.4"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarChatDrawer();}"></textarea>
+      <button onclick="enviarChatDrawer()" style="flex-shrink:0;width:44px;height:44px;background:linear-gradient(135deg,#1a3a8f,#2872f5);border:2px solid #1232a0;border-radius:50%;color:white;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(26,86,219,0.4)">↑</button>
+    </div>
+  </div>
+</div>
+
+<!-- FAB CHAT -->
+<div class="chat-fab" id="chatFab" onclick="abrirChatDrawer()" style="display:none">💬</div>
 
 <!-- HIDDEN FILE INPUTS - movidos dentro de los cards en renderAnalisis -->
 
@@ -967,6 +1158,7 @@ function setTab(tab){
   document.getElementById('tab-'+tab).classList.add('active');
   document.getElementById('cmdBar').style.display = (tab==='ruta') ? 'block' : 'none';
   renderContent();
+  actualizarFAB();
 }
 
 // ============================================================
@@ -1075,8 +1267,8 @@ function renderAnalisis(c){
         <div class="analisis-header" onclick="toggleAnalisis(${i})" style="cursor:pointer">
           <div class="num-badge">${i+1}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:13px">${a.cliente}${a.oficina?' · '+a.oficina:''}</div>
-            <div style="font-size:11px;color:var(--text2)">${a.localidad||'—'}</div>
+            <div style="font-weight:700;font-size:14px;letter-spacing:0.1px">${a.cliente}${a.oficina?` <span style="font-weight:500;color:var(--text2);font-size:13px">· ${a.oficina}</span>`:''}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:1px">${a.localidad||'—'}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">${a.sistema}</div>
@@ -1085,8 +1277,11 @@ function renderAnalisis(c){
             <div style="font-size:14px;color:var(--text3);transition:transform .2s;${isOpen?'transform:rotate(180deg)':''}">▾</div>
           </div>
         </div>
-        <div class="analisis-body" style="padding-bottom:6px">
-          <div style="font-size:12px;color:var(--text2);margin-bottom:4px">📍 ${a.direccion||'—'}</div>
+        <div class="analisis-body" style="padding-bottom:8px">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:5px">
+            <span style="opacity:0.6">📍</span> ${a.direccion||'—'}
+          </div>
+          ${a.trabajo ? `<div style="font-size:13px;color:var(--text);background:rgba(220,38,38,0.06);border-left:3px solid var(--accent);padding:6px 10px;border-radius:0 6px 6px 0;margin-bottom:7px;line-height:1.4">${a.trabajo}</div>` : ''}
           <span class="aviso-pill">${a.aviso||'Sin nº aviso'}</span>
         </div>`;
 
@@ -1094,7 +1289,15 @@ function renderAnalisis(c){
       if(isOpen){
         h += `<div class="analisis-desplegable">`;
 
-        if(sinNada){
+        // Bloque incidencia siempre visible al expandir
+        if(a.trabajo){
+          h += `<div class="desp-bloque" style="background:#fff5f5;border-left:3px solid var(--accent)">
+            <div class="desp-titulo" style="color:var(--accent)">🔧 Incidencia</div>
+            <div class="desp-msg" style="font-size:13px;line-height:1.5;color:var(--text)">${a.trabajo}</div>
+          </div>`;
+        }
+
+        if(sinNada && !a.trabajo){
           h += `<div class="desp-row desp-ok">✓ Sin alertas ni historial</div>`;
         }
 
@@ -1427,7 +1630,10 @@ Responde ÚNICAMENTE con JSON válido, sin texto ni markdown:
 
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
@@ -2076,22 +2282,36 @@ function renderTareas(c){
   items.forEach(it => { const k = it.fecha||'9999'; if(!grupos[k]) grupos[k]=[]; grupos[k].push(it); });
 
   const avisosConFecha = tabla.filter(f => !f._separador && f._fechaFijada && !f._eventoCreado);
+  const pendientes = tareas.filter(t=>!t.alarmaCreada).length;
+  const nEventos = eventosCalendario.length;
 
-  // ── CONTENEDOR CON SCROLL + BARRA FIJA ABAJO ──────────────────
   let html = `<div style="display:flex;flex-direction:column;height:calc(100dvh - 160px)">`;
+  html += `<div style="flex:1;overflow-y:auto;padding:0 0 8px">`;
 
-  // Lista con scroll
-  html += `<div style="flex:1;overflow-y:auto;padding:12px 14px 8px">`;
+  // Header
+  html += `<div class="tareas-header">
+    <div class="tareas-title">📋 Mis tareas</div>
+    <button onclick="solicitarPermisosNotificacion()" style="padding:7px 12px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:10px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer">🔔 Activar notifs</button>
+  </div>`;
+
+  // Chips resumen
+  if(items.length > 0){
+    html += `<div class="tareas-chips">
+      <span class="tarea-chip chip-total">${items.length} total</span>
+      ${pendientes>0?`<span class="tarea-chip chip-pendiente">⏰ ${pendientes} sin alarma</span>`:''}
+      ${nEventos>0?`<span class="tarea-chip chip-evento">📅 ${nEventos} eventos</span>`:''}
+    </div>`;
+  }
 
   // Avisos con fecha fija
   if(avisosConFecha.length > 0){
-    html += `<div style="background:var(--accent-light);border:2px solid var(--accent-mid);border-radius:var(--r);padding:10px 12px;margin-bottom:10px">
-      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent);margin-bottom:6px">⚠️ AVISOS CON FECHA FIJA</div>`;
+    html += `<div style="background:var(--accent-light);border:2px solid var(--accent-mid);border-radius:14px;padding:12px 14px;margin:0 14px 12px">
+      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent);margin-bottom:8px">⚠️ AVISOS CON FECHA FIJA</div>`;
     avisosConFecha.forEach(f => {
-      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
-        <div style="flex:1;font-size:12px;font-weight:600;color:var(--text)">${f.cliente} ${f.oficina||''} · ${f._fechaFijada}</div>
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${f.cliente} ${f.oficina||''} · ${f._fechaFijada}</div>
         <button onclick="crearEventoAviso(${tabla.indexOf(f)})"
-          style="padding:5px 10px;background:var(--accent);border:1.5px solid var(--accent-dark);border-radius:6px;color:white;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+          style="padding:6px 12px;background:var(--accent);border:1.5px solid var(--accent-dark);border-radius:8px;color:white;font-size:12px;font-weight:700;cursor:pointer">
           📅 Guardar
         </button>
       </div>`;
@@ -2099,83 +2319,75 @@ function renderTareas(c){
     html += `</div>`;
   }
 
-  // Lista vacía o con items
+  // Lista vacía
   if(items.length === 0){
-    html += `<div class="empty" style="padding-top:40px">
-      <div class="empty-icon">📋</div>
+    html += `<div class="empty" style="padding-top:50px">
+      <div class="empty-icon">✅</div>
       <div class="empty-title">Sin tareas ni eventos</div>
       <div class="empty-sub">Usa los botones de abajo para añadir</div>
     </div>`;
   } else {
-    // Chips resumen
-    const pendientes = tareas.filter(t=>!t.alarmaCreada).length;
-    const nEventos = eventosCalendario.length;
-    html += `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
-      <span style="padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700;background:var(--accent-light);color:var(--accent);border:1.5px solid var(--accent-mid)">${items.length} total</span>
-      ${pendientes>0?`<span style="padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700;background:var(--orange-light);color:var(--orange);border:1.5px solid var(--orange-mid)">⏰ ${pendientes} sin alarma</span>`:''}
-      ${nEventos>0?`<span style="padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700;background:var(--green-light);color:var(--green);border:1.5px solid var(--green-mid)">📅 ${nEventos} eventos</span>`:''}
-    </div>`;
-
+    html += `<div style="padding:0 14px">`;
     Object.keys(grupos).sort().forEach(fechaISO => {
       const esHoy = fechaISO === fmtISO(hoy);
       const esManana = fechaISO === fmtISO(manana);
-      const label = esHoy ? '🔴 HOY' : esManana ? '🟡 MAÑANA' : fmtDisp(fechaISO);
-      const diaSem = fechaISO !== '9999' ? new Date(fechaISO+'T12:00:00').toLocaleDateString('es-ES',{weekday:'short'}).toUpperCase() : '';
-      html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;color:${esHoy?'var(--accent)':'var(--text2)'};margin:10px 0 5px;letter-spacing:0.5px">${label}${diaSem?' — '+diaSem:''}</div>`;
+      const label = esHoy ? '🔴 Hoy' : esManana ? '🟡 Mañana' : fmtDisp(fechaISO);
+      const diaSem = fechaISO !== '9999' ? new Date(fechaISO+'T12:00:00').toLocaleDateString('es-ES',{weekday:'long'}) : '';
+      const clsGrupo = esHoy ? 'hoy' : esManana ? 'manana' : '';
+      html += `<div class="fecha-grupo-label ${clsGrupo}">${label}${diaSem && !esHoy && !esManana ? ' — '+diaSem : ''}</div>`;
 
       grupos[fechaISO].forEach(it => {
         const esTarea = it.tipo === 'tarea';
         const idx = esTarea ? tareas.indexOf(it) : eventosCalendario.indexOf(it);
-        const borderColor = esTarea ? 'var(--accent)' : 'var(--green)';
-        const icono = esTarea ? '📋' : '📅';
-        const iconoBg = esTarea ? 'var(--accent-light)' : 'var(--green-light)';
-        const alarmaOk = it.alarmaCreada;
         const itemId = `item-${it.id}`;
+        const alarmaOk = it.alarmaCreada;
+        const icono = esTarea ? '📋' : '📅';
 
-        html += `<div style="background:var(--bg2);border:1.5px solid var(--border);border-left:4px solid ${borderColor};border-radius:var(--r);margin-bottom:7px;box-shadow:var(--shadow);overflow:hidden">
-          <div onclick="toggleItemTarea('${itemId}')" style="padding:11px 12px;display:flex;align-items:center;gap:10px;cursor:pointer">
-            <div style="width:34px;height:34px;background:${iconoBg};border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${icono}</div>
+        html += `<div class="tarea-card tipo-${it.tipo}">
+          <div class="tarea-card-top" onclick="toggleItemTarea('${itemId}')">
+            <div class="tarea-icon-wrap tipo-${it.tipo}">${icono}</div>
             <div style="flex:1;min-width:0">
-              <div style="font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.texto||it.titulo||'—'}</div>
-              <div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px">${it.hora||'Sin hora'}${alarmaOk?' · <span style="color:var(--green)">✓ Alarma</span>':''}</div>
+              <div style="font-size:14px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.texto||it.titulo||'—'}</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:6px">
+                <span>🕐 ${it.hora||'Sin hora'}</span>
+                ${alarmaOk?`<span style="color:var(--green);font-weight:700">✓ Alarma</span>`:''}
+                ${esTarea&&!alarmaOk?`<span style="color:var(--orange);font-weight:600">Sin alarma</span>`:''}
+              </div>
             </div>
-            <span style="color:var(--text3);font-size:13px;flex-shrink:0">▾</span>
+            <span style="color:var(--text3);font-size:13px;flex-shrink:0" id="arr-${itemId}">▾</span>
           </div>
-          <div id="${itemId}" style="display:none;padding:10px 12px;background:var(--bg3);border-top:1px solid var(--border)">
-            <div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:10px;word-break:break-word">${it.texto||it.titulo||'—'}</div>
-            <div style="display:flex;gap:8px">
-              ${esTarea && !alarmaOk ? `<button onclick="crearAlarma(${idx})" style="flex:1;padding:10px;background:var(--accent);border:2px solid var(--accent-dark);border-radius:var(--rs);color:white;font-size:13px;font-weight:700;cursor:pointer">⏰ Crear alarma</button>` : ''}
-              ${esTarea && alarmaOk ? `<span style="flex:1;padding:10px;background:var(--green-light);border:1.5px solid var(--green-mid);border-radius:var(--rs);font-size:13px;color:var(--green);font-weight:700;text-align:center">✓ Alarma creada</span>` : ''}
-              <button onclick="${esTarea?'eliminarTarea':'eliminarEvento'}(${idx})" style="padding:10px 14px;background:var(--bg2);border:2px solid var(--accent-mid);border-radius:var(--rs);color:var(--accent);font-size:13px;font-weight:700;cursor:pointer">✕ Borrar</button>
+          <div class="tarea-card-body" id="${itemId}">
+            <div style="font-size:13px;color:var(--text);line-height:1.6;padding-top:12px;margin-bottom:10px">${it.texto||it.titulo||'—'}</div>
+            <div class="tarea-actions">
+              ${esTarea && !alarmaOk ? `<button class="btn-alarma" onclick="crearAlarma(${idx})">⏰ Alarma</button>` : ''}
+              ${esTarea && alarmaOk ? `<span style="flex:1;padding:11px;background:var(--green-light);border:1.5px solid var(--green-mid);border-radius:10px;font-size:12px;color:var(--green);font-weight:700;text-align:center">✓ Alarma OK</span>` : ''}
+              ${!esTarea ? `<button class="btn-ics" onclick="exportarICS(${idx})">📅 Outlook</button>` : ''}
+              ${esTarea ? `<button class="btn-todo" onclick="abrirToDo(${idx})">✅ To Do</button>` : ''}
+              <button class="btn-borrar-tarea" onclick="${esTarea?'eliminarTarea':'eliminarEvento'}(${idx})">🗑</button>
             </div>
           </div>
         </div>`;
       });
     });
+    html += `</div>`;
   }
 
   html += `</div>`; // fin scroll
 
-  // ── BARRA INFERIOR FIJA — 3 BOTONES ───────────────────────────
-  html += `<div style="display:flex;gap:0;border-top:2px solid var(--border);background:var(--bg2);flex-shrink:0">
-    <button onclick="abrirModalTarea()"
-      style="flex:1;padding:16px 8px;background:var(--accent);border:none;color:white;font-size:13px;font-weight:800;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;border-right:2px solid rgba(0,0,0,0.1)">
-      <span style="font-size:22px">📋</span>
-      <span>TAREA</span>
+  // Barra inferior
+  html += `<div class="tareas-add-bar">
+    <button class="tareas-add-btn btn-tarea-add" onclick="abrirModalTarea()">
+      <span style="font-size:22px">📋</span><span>TAREA</span>
     </button>
-    <button onclick="abrirModalEvento()"
-      style="flex:1;padding:16px 8px;background:#d4a017;border:none;color:white;font-size:13px;font-weight:800;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;border-right:2px solid rgba(0,0,0,0.1)">
-      <span style="font-size:22px">📅</span>
-      <span>EVENTO</span>
+    <button class="tareas-add-btn btn-evento-add" onclick="abrirModalEvento()">
+      <span style="font-size:22px">📅</span><span>EVENTO</span>
     </button>
-    <button onclick="abrirClaudeConContexto()"
-      style="flex:1;padding:16px 8px;background:var(--accent);border:none;color:white;font-size:13px;font-weight:800;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M21 6.5C21 8.43 19.43 10 17.5 10S14 8.43 14 6.5 15.57 3 17.5 3 21 4.57 21 6.5zM17.5 12C14.46 12 12 14.46 12 17.5S14.46 23 17.5 23 23 20.54 23 17.5 20.54 12 17.5 12zm0 9c-1.93 0-3.5-1.57-3.5-3.5S15.57 14 17.5 14 21 15.57 21 17.5 19.43 21 17.5 21zM6.5 12C3.46 12 1 14.46 1 17.5S3.46 23 6.5 23 12 20.54 12 17.5 9.54 12 6.5 12zm0 9C4.57 21 3 19.43 3 17.5S4.57 14 6.5 14 10 15.57 10 17.5 8.43 21 6.5 21zM6.5 3C4.57 3 3 4.57 3 6.5S4.57 10 6.5 10 10 8.43 10 6.5 8.43 3 6.5 3z"/></svg>
-      <span>COPILOT</span>
+    <button class="tareas-add-btn btn-copilot-add" onclick="abrirChatDrawer()">
+      <span style="font-size:22px">💬</span><span>IA CHAT</span>
     </button>
   </div>`;
 
-  html += `</div>`; // fin flex container
+  html += `</div>`;
   c.innerHTML += html;
 }
 
@@ -4131,6 +4343,270 @@ function confirmarPreview(){
 // ============================================================
 function nrm(s){ if(!s) return ''; return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+// ============================================================
+// CHAT DRAWER
+// ============================================================
+function abrirChatDrawer(){
+  document.getElementById('chatDrawer').classList.add('open');
+  document.getElementById('chatDrawerOverlay').classList.add('open');
+  renderChatDrawer();
+  setTimeout(()=>{
+    const m = document.getElementById('chatDrawerMensajes');
+    if(m) m.scrollTop = m.scrollHeight;
+    document.getElementById('chatDrawerInput')?.focus();
+  }, 350);
+}
+
+function cerrarChatDrawer(){
+  document.getElementById('chatDrawer').classList.remove('open');
+  document.getElementById('chatDrawerOverlay').classList.remove('open');
+}
+
+function renderChatDrawer(){
+  const el = document.getElementById('chatDrawerMensajes');
+  if(!el) return;
+  if(chatHistorial.length === 0){
+    el.innerHTML = `<div style="text-align:center;padding:30px 20px;color:var(--text3)">
+      <div style="font-size:36px;margin-bottom:12px">🤖</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:6px">Asistente con contexto completo</div>
+      <div style="font-size:13px;line-height:1.6;margin-bottom:16px">Tengo acceso a tus avisos del día,<br>Diario e Info2026 cargados.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;text-align:left">
+        ${['¿Qué mantenimientos he hecho este mes?','¿En qué oficinas hay extintores caducados?','¿Cuál es el historial de Cajamar 22040?','Redáctame un email de cierre para hoy'].map(s=>
+          `<div onclick="usarSugerenciaDrawer(this)" style="background:white;border:1.5px solid var(--border2);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">${s}</div>`
+        ).join('')}
+      </div>
+    </div>`;
+    return;
+  }
+  let h = '';
+  chatHistorial.forEach((msg,i) => {
+    if(msg.role==='user'){
+      h += `<div style="display:flex;justify-content:flex-end">
+        <div style="max-width:82%;background:var(--accent);color:white;border-radius:16px 16px 4px 16px;padding:11px 15px;font-size:14px;line-height:1.5">
+          ${msg.imgBase64?`<div style="margin-bottom:6px"><img src="data:image/jpeg;base64,${msg.imgBase64}" style="max-width:100%;border-radius:8px;max-height:120px;object-fit:cover"></div>`:''}
+          ${msg.text||''}
+        </div>
+      </div>`;
+    } else {
+      h += `<div style="display:flex;flex-direction:column;gap:4px">
+        <div style="max-width:92%;background:white;border:1.5px solid var(--border);border-radius:16px 16px 16px 4px;padding:12px 15px;font-size:14px;line-height:1.6;color:var(--text);box-shadow:var(--shadow)">
+          ${formatearRespuesta(msg.content)}
+        </div>
+        <div style="display:flex;gap:6px;padding-left:4px">
+          <button onclick="guardarRespuestaEnInfo(${i})" style="padding:5px 10px;background:var(--accent-light);border:1.5px solid var(--accent-mid);border-radius:6px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer">💾 Guardar</button>
+          <button onclick="copiarMensaje(${i})" style="padding:5px 10px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:6px;font-size:11px;color:var(--text3);cursor:pointer">📋 Copiar</button>
+        </div>
+      </div>`;
+    }
+  });
+  if(chatCargando){
+    h += `<div style="display:flex;justify-content:flex-start">
+      <div style="background:white;border:1.5px solid var(--border);border-radius:16px;padding:12px 16px;color:var(--text3);font-size:13px;box-shadow:var(--shadow);display:flex;align-items:center;gap:8px">
+        <div class="ia-spinner" style="border-color:rgba(0,0,0,0.15);border-top-color:var(--accent)"></div> Pensando...
+      </div>
+    </div>`;
+  }
+  el.innerHTML = h;
+  el.scrollTop = el.scrollHeight;
+}
+
+function usarSugerenciaDrawer(el){
+  const input = document.getElementById('chatDrawerInput');
+  if(input){ input.value = el.textContent; input.focus(); }
+}
+
+async function enviarChatDrawer(){
+  const input = document.getElementById('chatDrawerInput');
+  const texto = input?.value?.trim();
+  if(!texto && !_chatImgBase64) return;
+  input.value = '';
+
+  // Construir contexto
+  const ctx = construirContextoChat(texto);
+
+  const userMsg = { role:'user', text: texto||'[imagen]', imgBase64: _chatImgBase64, imgType: _chatImgType };
+  chatHistorial.push(userMsg);
+  _chatImgBase64 = null; _chatImgType = null;
+  document.getElementById('chatDrawerImgZone').style.display = 'none';
+
+  chatCargando = true;
+  renderChatDrawer();
+
+  try {
+    const messages = chatHistorial.slice(0,-1).map(m => {
+      if(m.role==='user'){
+        const content = [];
+        if(m.imgBase64) content.push({type:'image',source:{type:'base64',media_type:m.imgType||'image/jpeg',data:m.imgBase64}});
+        if(m.text && m.text !== '[imagen]') content.push({type:'text',text:m.text});
+        return {role:'user', content: content.length===1&&!m.imgBase64 ? m.text : content};
+      }
+      return {role:'assistant', content: m.content};
+    });
+
+    // Añadir mensaje actual con contexto
+    const lastContent = [];
+    if(userMsg.imgBase64) lastContent.push({type:'image',source:{type:'base64',media_type:userMsg.imgType||'image/jpeg',data:userMsg.imgBase64}});
+    lastContent.push({type:'text', text: ctx});
+    messages.push({role:'user', content: lastContent});
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514', max_tokens:1500,
+        system: CHAT_SYSTEM,
+        messages
+      })
+    });
+    const data = await resp.json();
+    const respText = (data.content||[]).map(b=>b.text||'').join('');
+    chatHistorial.push({role:'assistant', content: respText});
+  } catch(e) {
+    chatHistorial.push({role:'assistant', content:'⚠️ Error al conectar. Comprueba conexión.'});
+  } finally {
+    chatCargando = false;
+    renderChatDrawer();
+  }
+}
+
+function construirContextoChat(pregunta){
+  let ctx = pregunta || '';
+  const hayDatos = diarioDB.length > 0 || infoDB.length > 0 || analisisResultado.length > 0;
+  if(!hayDatos) return ctx;
+
+  ctx += '\n\n--- CONTEXTO ---';
+  if(analisisResultado.length > 0){
+    ctx += `\nAvisos hoy (${analisisResultado.length}): ` + analisisResultado.map(a=>`${a.cliente} ${a.oficina||''} ${a.localidad||''} — ${a.trabajo||'sin desc'}`).join(' | ');
+  }
+  if(diarioDB.length > 0){
+    const recientes = diarioDB.slice(-30).map(r=>`${r.Fecha||''}|${r.Cliente||''}|${r.Localidad||''}|${(r['Trabajo / Descripcion']||r.Trabajo||'').substring(0,60)}`).join('\n');
+    ctx += `\nDiario (últimas 30 entradas):\n${recientes}`;
+  }
+  return ctx;
+}
+
+function copiarContextoPortapapeles(){
+  const ctx = construirContextoChat('Contexto completo de LibretaIA para el técnico de seguridad Pycseca Valencia:');
+  navigator.clipboard.writeText(ctx).then(()=>toast('📋 Contexto copiado — pégalo en Copilot')).catch(()=>toast('No se pudo copiar'));
+}
+
+// ============================================================
+// EXPORTAR .ICS PARA OUTLOOK
+// ============================================================
+function exportarICS(idx){
+  const ev = eventosCalendario[idx];
+  if(!ev){ toast('Evento no encontrado'); return; }
+  const fmtICS = iso => {
+    if(!iso) return '';
+    const [y,m,d] = iso.split('-');
+    return `${y}${m}${d}`;
+  };
+  const hora = (ev.hora||'09:00').replace(':','') + '00';
+  const horaFin = (parseInt((ev.hora||'09:00').replace(':','').substring(0,2))+1).toString().padStart(2,'0') + (ev.hora||'09:00').split(':')[1] + '00';
+  const uid = `libretaia-${ev.id}@pycseca`;
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//LibretaIA//Pycseca//ES',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTART:${fmtICS(ev.fecha)}T${hora}`,
+    `DTEND:${fmtICS(ev.fecha)}T${horaFin}`,
+    `SUMMARY:${ev.titulo||'Evento'}`,
+    `DESCRIPTION:Generado por LibretaIA - Pycseca Seguridad`,
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  const blob = new Blob([ics], {type:'text/calendar'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `evento-${ev.id}.ics`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('📅 Archivo .ics descargado — ábrelo para añadir a Outlook');
+}
+
+// ============================================================
+// MICROSOFT TO DO
+// ============================================================
+function abrirToDo(idx){
+  const t = tareas[idx];
+  if(!t) return;
+  const texto = encodeURIComponent(t.texto||'Tarea LibretaIA');
+  // Intentar abrir app To Do
+  const appUrl = `ms-to-do://tasks/new?title=${texto}`;
+  const webUrl = `https://to-do.office.com/tasks/new?title=${texto}`;
+
+  // Intentar app primero, fallback a web
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = appUrl;
+  document.body.appendChild(iframe);
+  setTimeout(()=>{
+    document.body.removeChild(iframe);
+    window.open(webUrl, '_blank');
+  }, 1500);
+  toast('✅ Abriendo Microsoft To Do...');
+}
+
+// ============================================================
+// NOTIFICACIONES PUSH
+// ============================================================
+async function solicitarPermisosNotificacion(){
+  if(!('Notification' in window)){
+    toast('⚠️ Este navegador no soporta notificaciones');
+    return;
+  }
+  if(Notification.permission === 'granted'){
+    toast('✓ Notificaciones ya activadas');
+    programarNotificacionesPendientes();
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if(perm === 'granted'){
+    toast('✓ Notificaciones activadas');
+    programarNotificacionesPendientes();
+    new Notification('LibretaIA 🔔', {
+      body: 'Las notificaciones están activas. Recibirás alarmas de tus tareas.',
+      icon: 'icon.jpg'
+    });
+  } else {
+    toast('⚠️ Permiso denegado. Actívalo en ajustes del navegador.');
+  }
+}
+
+function programarNotificacionesPendientes(){
+  if(Notification.permission !== 'granted') return;
+  tareas.forEach(t => {
+    if(!t.fecha || !t.hora || t.notifProgramada) return;
+    const [y,m,d] = t.fecha.split('-');
+    const [hh,mm] = t.hora.split(':');
+    const cuando = new Date(y,m-1,d,hh,mm,0).getTime();
+    const ahora = Date.now();
+    const diff = cuando - ahora;
+    if(diff > 0 && diff < 7*24*60*60*1000){ // max 7 días
+      setTimeout(()=>{
+        new Notification(`⏰ ${t.texto||'Tarea'}`, {
+          body: `Recordatorio LibretaIA · ${t.hora}`,
+          icon: 'icon.jpg',
+          tag: `tarea-${t.id}`
+        });
+      }, diff);
+      t.notifProgramada = true;
+      guardarStorage();
+      toast(`🔔 Notificación programada para ${t.hora}`);
+    }
+  });
+}
+
+// Mostrar FAB chat en todas las pestañas excepto tareas (que tiene botón propio)
+function actualizarFAB(){
+  const fab = document.getElementById('chatFab');
+  if(!fab) return;
+  fab.style.display = tabActiva === 'conocimiento' ? 'none' : 'flex';
+}
 </script>
 <script>
 // Service Worker — solo activo desde HTTPS (OneDrive/PWA)
@@ -4140,6 +4616,8 @@ if('serviceWorker' in navigator && location.protocol === 'https:'){
       .catch(e => console.log('SW:', e));
   });
 }
+// Init FAB
+setTimeout(actualizarFAB, 100);
 </script>
 </body>
 </html>
