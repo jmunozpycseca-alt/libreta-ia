@@ -861,9 +861,40 @@ let infoCargado = false;
 let tareas = [];           // [{id, texto, fecha, hora, enviado}]
 let eventosCalendario = []; // [{id, otId, titulo, fecha, hora, enviado}]
 let subTabArchivar = 'cierre'; // 'cierre' | 'guardar' | 'informe'
-let informeFotos = []; // [{base64, nombre, aviso, nota}]
-let notasJornada = ''; // texto libre de notas del día
+let informeFotos = []; // [{id, base64, nombre, nota}]
+let notasJornada = ''; // nota activa (compatibilidad)
+let notasDB = [];      // [{id, titulo, texto, fecha}] — notas múltiples
 let mtoManual = {};   // {clienteKey: {Q1:'DD/MM',Q2:'DD/MM',...}} overrides manuales
+let infoOculta = {};  // {hash: {nivel:'averia'|'oficina'|'cliente', valor, tipoAveria?}}
+
+// ── IA — GEMINI VIA CLOUDFLARE PROXY ─────────────────────────
+const PROXY_URL = 'https://pycseca-ia.jmunoz-pycseca.workers.dev';
+
+async function claudeChat(systemPrompt, messages, maxTokens=1500){
+  // Convertir a formato Gemini
+  const contents = [];
+  if(systemPrompt){
+    contents.push({ role:'user', parts:[{text: systemPrompt}] });
+    contents.push({ role:'model', parts:[{text:'Entendido, soy tu asistente Pycseca.'}] });
+  }
+  messages.forEach(m => {
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    const text = typeof m.content === 'string' ? m.content : (m.text || '');
+    if(text) contents.push({ role, parts:[{text}] });
+  });
+
+  const resp = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 }
+    })
+  });
+  const data = await resp.json();
+  if(data.error) throw new Error(data.error.message || 'Error IA');
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
 let subTabRuta = 'seleccion';  // 'seleccion' | 'miruta'
 let rutaSeleccion = new Set(); // índices seleccionados en SELECCIÓN
 let iaEnriqueciendo = false;   // true mientras Claude está procesando
@@ -1040,7 +1071,9 @@ function guardarStorage(){
     localStorage.setItem('rt_analisis', JSON.stringify(analisisResultado));
     localStorage.setItem('rt_seleccion', JSON.stringify([...rutaSeleccion]));
     localStorage.setItem('rt_notas', notasJornada);
+    localStorage.setItem('rt_notasDB', JSON.stringify(notasDB));
     localStorage.setItem('rt_mto', JSON.stringify(mtoManual));
+    localStorage.setItem('rt_infoOculta', JSON.stringify(infoOculta));
     if(diarioCargado) localStorage.setItem('rt_diario_ok','1');
     if(infoCargado)   localStorage.setItem('rt_info_ok','1');
   } catch(e){}
@@ -1072,6 +1105,17 @@ function cargarStorage(){
     if(notas) notasJornada = notas;
     const mto = localStorage.getItem('rt_mto');
     if(mto) mtoManual = JSON.parse(mto);
+    const io = localStorage.getItem('rt_infoOculta');
+    if(io) infoOculta = JSON.parse(io);
+    const ndb = localStorage.getItem('rt_notasDB');
+    if(ndb) notasDB = JSON.parse(ndb);
+    // Migrar nota antigua si existe
+    const notasOld = localStorage.getItem('rt_notas');
+    if(notasOld && notasOld.trim() && notasDB.length === 0){
+      notasDB.push({ id:'n'+Date.now(), titulo:'Notas anteriores', texto:notasOld, fecha:getFecha() });
+      localStorage.removeItem('rt_notas');
+      guardarStorage();
+    }
   } catch(e){}
 }
 
@@ -1180,11 +1224,13 @@ function renderAnalisis(c){
       🔍 Analizar
     </button>
     ${analisisResultado.length > 0 ? `
-    <button id="btnIA" onclick="enriquecerConIA()" ${iaEnriqueciendo?'disabled':''}
-      style="flex:3;padding:12px;background:${iaEnriqueciendo?'#374151':'linear-gradient(135deg,#1a3a8f,#2872f5)'};border:2px solid ${iaEnriqueciendo?'#374151':'#1232a0'};border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:${iaEnriqueciendo?'0.7':'1'}">
-      ${iaEnriqueciendo
-        ? `<div class="ia-spinner"></div><span>Analizando...</span>`
-        : `<span>✨ Analizar con IA</span>`}
+    <button onclick="enriquecerConIA()" ${iaEnriqueciendo?'disabled':''}
+      style="flex:2;padding:12px;background:${iaEnriqueciendo?'#374151':'linear-gradient(135deg,#1a7a4a,#22c55e)'};border:2px solid ${iaEnriqueciendo?'#374151':'#166534'};border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:${iaEnriqueciendo?'0.7':'1'}">
+      ${iaEnriqueciendo ? `<div class="ia-spinner"></div><span>Analizando...</span>` : `<span>✨ IA</span>`}
+    </button>
+    <button onclick="copiarContextoCopilot()"
+      style="flex:2;padding:12px;background:linear-gradient(135deg,#0078d4,#005a9e);border:2px solid #004c8c;border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+      📋 Copilot
     </button>` : ''}
   </div>`;
   if(iaResumen){
@@ -1308,19 +1354,57 @@ function renderAnalisis(c){
           };
           const [bg, accent] = bgs[al.tipo] || ['#f9fafb','#6b7280'];
 
+          const colId = `tec-${i}-${Math.random().toString(36).slice(2,6)}`;
+          const esColapsable = al.colapsable;
+          const esTecnica = al.tipo === 'tecnica';
+
+          // Escapar texto para uso en onclick
+          const msgEsc = (al.msg||'').replace(/'/g,"\\'").replace(/"/g,'&quot;').substring(0,120);
+          const clienteEsc = (a.cliente||'').replace(/'/g,"\\'");
+          const oficinaEsc = (a.oficina||'').replace(/'/g,"\\'");
+          const trabajoEsc = (a.trabajo||a.trabajo_desc||'').replace(/'/g,"\\'").substring(0,60);
+
           h += `<div class="desp-bloque" style="background:${bg};border:1.5px solid ${accent}22">
-            <div class="desp-titulo" style="color:${accent}">${al.emoji} ${al.titulo}</div>
-            <div class="desp-msg">${al.msg}</div>`;
+            <div class="desp-titulo" style="color:${accent};display:flex;align-items:center;justify-content:space-between;cursor:${esColapsable?'pointer':'default'}" ${esColapsable?`onclick="toggleInfoTec('${colId}')"`:''}>${al.emoji} ${al.titulo}
+              <div style="display:flex;gap:6px;align-items:center">
+                ${esTecnica?`<span onclick="event.stopPropagation();ocultarInfo('${msgEsc}','${clienteEsc}','${oficinaEsc}','${trabajoEsc}')" title="Ocultar esta info" style="font-size:14px;cursor:pointer;opacity:0.6;padding:2px 4px" >🚫</span>`:''}
+                ${esColapsable?`<span id="arr-${colId}" style="font-size:13px;transition:transform 0.2s">🔑</span>`:''}
+              </div>
+            </div>
+            <div id="${colId}" style="display:${esColapsable?'none':'block'}">
+              <div class="desp-msg">${al.msg}</div>
+            </div>`;
 
           if(al.tipo==='historial' && a._historial && a._historial.length > 0){
+            const histRev = a._historial.slice().reverse();
+            const MAX = 5;
+            const mostrar = histRev.slice(0, MAX);
+            const resto = histRev.slice(MAX);
+            const histId = `hist-${i}-${Math.random().toString(36).slice(2,6)}`;
+
             h += `<div class="desp-historial-lista">`;
-            a._historial.slice().reverse().forEach((h2,hi) => {
+            mostrar.forEach((h2, hi) => {
               const esUlt = hi === 0;
               h += `<div class="desp-hist-item${esUlt?' desp-hist-ult':''}">
                 <span class="desp-hist-fecha">${h2.fecha}</span>
                 <span class="desp-hist-trab">${h2.trabajo||'—'}</span>
               </div>`;
             });
+
+            if(resto.length > 0){
+              h += `<div id="${histId}" style="display:none">`;
+              resto.forEach(h2 => {
+                h += `<div class="desp-hist-item">
+                  <span class="desp-hist-fecha">${h2.fecha}</span>
+                  <span class="desp-hist-trab">${h2.trabajo||'—'}</span>
+                </div>`;
+              });
+              h += `</div>`;
+              h += `<div onclick="toggleHistorial('${histId}',this)" 
+                style="text-align:center;padding:5px;font-size:11px;font-weight:700;color:#2563eb;cursor:pointer;margin-top:4px">
+                📋 Ver ${resto.length} visita${resto.length>1?'s':''} más
+              </div>`;
+            }
             h += `</div>`;
           }
 
@@ -1644,22 +1728,8 @@ Responde ÚNICAMENTE con JSON válido, sin texto ni markdown:
   ]
 }`;
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-
-    const data = await resp.json();
-    const raw = (data.content||[]).map(b=>b.text||'').join('');
-    const clean = raw.replace(/```json|```/g,'').trim();
+    const resp = await claudeChat(null, [{role:'user', content: prompt}], 1200);
+    const clean = resp.replace(/```json|```/g,'').trim();
     const result = JSON.parse(clean);
 
     // Aplicar notas a analisisResultado (no bloqueante — ya podía haber selecciones)
@@ -1869,9 +1939,19 @@ function parsearBloque(texto){
 
   // 2. Horarios / Llaves del Info2026 (hoja general)
   const matchInfo = r => {
-    const mCod = a.oficina && r.Codigo && nrm(String(r.Codigo)) === nrm(String(a.oficina));
-    const mCli = a.cliente && (nrm(r.Entidad) && nrm(a.cliente).includes(nrm(r.Entidad)) || nrm(r.Cliente) && nrm(a.cliente).includes(nrm(r.Cliente)));
-    const mLoc = a.localidad && r.Poblacion && nrm(a.localidad).includes(nrm(r.Poblacion));
+    const normSist = s => String(s||'').replace(/[\s.\-]/g,'').replace(/^0+/,'').toLowerCase();
+    const normCli  = s => nrm(s||'').replace(/coop.*|s\.?a\.?.*|s\.?l\.?.*/,'').trim();
+    const mCod = a.oficina && r.Codigo && normSist(r.Codigo) === normSist(a.oficina);
+    const cliA = normCli(a.cliente||'').split(' ')[0];
+    const mCli = cliA.length > 2 && (
+      normCli(r.Entidad||'').includes(cliA) ||
+      normCli(r.Cliente||'').includes(cliA) ||
+      cliA.includes(normCli(r.Entidad||'').split(' ')[0]) ||
+      cliA.includes(normCli(r.Cliente||'').split(' ')[0])
+    );
+    const locA = nrm(a.localidad||'');
+    const locR = nrm(r.Poblacion||'');
+    const mLoc = locA.length > 2 && locR.length > 2 && (locR.includes(locA) || locA.includes(locR));
     return mCod || (mCli && mLoc);
   };
   infoDB.filter(matchInfo).forEach(r => {
@@ -1889,21 +1969,29 @@ function parsearBloque(texto){
       console.log('Registros diario con casas:', muestra.length, muestra[0] ? JSON.stringify(muestra[0]) : 'ninguno');
     }
     const hits = diarioDB.filter(r=>{
-      // Matching por número de sistema (a.oficina = "22040", r.Sistema = "22040")
-      const sistNrm = nrm(String(r.Sistema||'').replace(/[.\-]/g,''));
-      const ofiNrm  = nrm(String(a.oficina||'').replace(/[.\-]/g,''));
-      const mSis = ofiNrm.length > 2 && sistNrm.length > 2 && (sistNrm === ofiNrm || sistNrm.startsWith(ofiNrm) || ofiNrm.startsWith(sistNrm));
+      // Normalizar número de sistema — quitar puntos, guiones, espacios, ceros iniciales
+      const normSist = s => String(s||'').replace(/[\s.\-]/g,'').replace(/^0+/,'').toLowerCase();
+      const sistNrm = normSist(r.Sistema);
+      const ofiNrm  = normSist(a.oficina);
+      const mSis = ofiNrm.length > 2 && sistNrm.length > 2 && (
+        sistNrm === ofiNrm ||
+        sistNrm.endsWith(ofiNrm) ||
+        ofiNrm.endsWith(sistNrm)
+      );
 
-      // Matching por cliente (r.Cliente = "CAJAMAR", a.cliente = "CAJAMAR")
-      const cliA = nrm(a.cliente||'').split(' ')[0];
-      const cliR = nrm(r.Cliente||'') + ' ' + nrm(r.Entidad||'');
+      // Matching por cliente — normalizar variantes (CAJAMAR COOP, CAJA RURAL, etc.)
+      const normCli = s => nrm(s||'').replace(/coop.*|s\.?a\.?.*|s\.?l\.?.*|soc\b.*/,'').trim();
+      const cliA = normCli(a.cliente||'').split(' ')[0];
+      const cliR = normCli(r.Cliente||'') + ' ' + normCli(r.Entidad||'');
       const mCli = cliA.length > 2 && cliR.includes(cliA);
 
-      // Matching por localidad (r.Localidad = "Casas ibañez", a.localidad = "Casas ibañez")
+      // Matching por localidad
       const locA = nrm(a.localidad||'');
       const locR = nrm(r.Localidad||'');
       const mLoc = locA.length > 2 && locR.length > 2 && (locR.includes(locA) || locA.includes(locR));
 
+      // Match fuerte: sistema coincide
+      // Match medio: cliente + localidad coinciden
       return mSis || (mCli && mLoc);
     });
     if(hits.length > 0){
@@ -1919,20 +2007,57 @@ function parsearBloque(texto){
     }
   }
 
-  // 4. Info técnica relevante
-  infoTecDB.filter(matchInfo).forEach(r => {
-    a.alertas.push({tipo:'tecnica', emoji:'🔧', titulo:'INFO TÉCNICA', msg: r.Info.substring(0,120)});
+  // 4. Info técnica relevante — solo si el contenido es relevante para esta avería
+  // Palabras clave del aviso (normalizadas)
+  const textoNrm = nrm(texto);
+
+  function infoEsRelevante(r){
+    const info    = nrm(r.Info||'');
+    const tags    = nrm(r.Etiquetas||'');
+    const titulo  = nrm(r.Titulo||'');
+
+    // Palabras clave de la avería — qué tipo de problema es
+    const esGSM        = /gsm|flex|comunicac|alwon|transmit|ping|modem|sim/i.test(texto);
+    const esSpider     = /spider|programar|codigo maestro|maestro|programacion|codigo pro/i.test(texto);
+    const esTamper     = /tamper/i.test(texto) && !/teclado.*programar|programar.*teclado/i.test(texto);
+    const esTeclado    = /teclado/i.test(texto) && !esTamper;
+    const esAlarma     = /alarma|detector|zona|sirena|sensor/i.test(texto);
+    const esBateria    = /bateria|batería|baja tension|baja tensión/i.test(texto);
+    const esIncendio   = /incendio|pci|extintor|bies|rociador|central.*incend/i.test(texto);
+
+    // La info habla de GSM/ALWON → solo si avería es de comunicaciones
+    if(/alwon|gsm|flex.*comunic|comunicac.*flex/i.test(info) || /alwon|gsm/i.test(tags)){
+      return esGSM;
+    }
+    // La info habla de Spider/códigos → solo si avería es de programación Spider
+    if(/spider|codigo maestro|codigo pro|maestro/i.test(info) || /spider/i.test(tags)){
+      return esSpider || esTeclado;
+    }
+    // La info habla de batería → solo si avería es de batería
+    if(/bateria|batería|baja tension/i.test(info)){
+      return esBateria;
+    }
+    // La info habla de incendio/PCI → solo si avería es de PCI
+    if(/incendio|pci|extintor/i.test(info)){
+      return esIncendio;
+    }
+    // Info genérica (horarios, procedimientos) → siempre mostrar si coincide el sistema
+    return true;
+  }
+
+  infoTecDB.filter(r => matchInfo(r) && infoEsRelevante(r) && !infoEstaOculta(r.Info||'', a.cliente||'', a.oficina||'', texto)).forEach(r => {
+    a.alertas.push({tipo:'tecnica', emoji:'🔧', titulo:'INFO TÉCNICA', msg: r.Info, colapsable: true});
   });
-  // También buscar por tags (ALWON, Spider, etc.)
+  // Buscar también por tags para Cajamar (ALWON, Spider) — con filtro de relevancia
   if(a.cliente && /CAJAMAR/i.test(a.cliente)){
     infoTecDB.filter(r => {
       const tags = r.Etiquetas||'';
-      if(/ALWON/i.test(tags) && /ALWON|GSM/i.test(texto)) return true;
-      if(/Spider/i.test(tags) && /Spider|teclado|código/i.test(texto)) return true;
+      if(/ALWON/i.test(tags) && /ALWON|GSM|comunicac|flex/i.test(texto)) return true;
+      if(/Spider/i.test(tags) && /Spider|programar|codigo|maestro/i.test(texto)) return true;
       return false;
     }).forEach(r => {
-      if(!a.alertas.some(al=>al.msg===r.Info.substring(0,120))){
-        a.alertas.push({tipo:'tecnica', emoji:'🔧', titulo:'INFO TÉCNICA', msg: r.Info.substring(0,120)});
+      if(!a.alertas.some(al=>al.msg===r.Info) && !infoEstaOculta(r.Info||'', a.cliente||'', a.oficina||'', texto)){
+        a.alertas.push({tipo:'tecnica', emoji:'🔧', titulo:'INFO TÉCNICA', msg: r.Info, colapsable: true});
       }
     });
   }
@@ -2461,8 +2586,8 @@ function renderTareas(c){
     <button class="tareas-add-btn btn-evento-add" onclick="abrirModalEvento()">
       <span style="font-size:22px">📅</span><span>EVENTO</span>
     </button>
-    <button class="tareas-add-btn btn-copilot-add" onclick="abrirChatDrawer()">
-      <span style="font-size:22px">💬</span><span>IA CHAT</span>
+    <button class="tareas-add-btn btn-copilot-add" onclick="abrirNotas()">
+      <span style="font-size:22px">📝</span><span>NOTAS${notasDB.length>0?` (${notasDB.length})`:''}</span>
     </button>
   </div>`;
 
@@ -2565,37 +2690,99 @@ function confirmarEvento(){
   toast('✓ Evento guardado');
 }
 
-function abrirModalNotas(){
+function abrirNotas(){ abrirModalNotas(); }
+function abrirModalNotas(notaId){
   const overlay = document.getElementById('trabajoOverlay');
   const box = overlay.querySelector('.trabajo-box');
+
+  if(notaId){
+    // Editar nota existente
+    const nota = notasDB.find(n => n.id === notaId) || {id:notaId, titulo:'', texto:'', fecha:getFecha()};
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <button onclick="abrirModalNotas()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3)">←</button>
+        <div class="trabajo-title" style="color:var(--text);margin:0">${nota.id==='__nueva'?'Nueva nota':'Editar nota'}</div>
+      </div>
+      <input id="notaTitulo" value="${(nota.titulo||'').replace(/"/g,'&quot;')}" placeholder="Título (ej: Casas Ibáñez, recordatorio...)"
+        style="width:100%;background:var(--bg3);border:1.5px solid var(--border2);border-radius:var(--rs);padding:10px 12px;font-size:14px;font-weight:700;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box;font-family:var(--sans)">
+      <textarea id="notasInput" rows="9" placeholder="Escribe aquí..."
+        style="width:100%;background:var(--bg3);border:1.5px solid var(--border2);border-radius:var(--rs);padding:12px 14px;font-size:14px;color:var(--text);outline:none;resize:none;font-family:var(--sans);line-height:1.6;box-sizing:border-box">${nota.texto||''}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button onclick="guardarNota('${notaId}')"
+          style="flex:1;padding:13px;background:var(--accent);border:2px solid var(--accent-dark);border-radius:var(--rs);color:white;font-size:14px;font-weight:700;cursor:pointer">
+          💾 Guardar
+        </button>
+        <button onclick="copiarNota('${notaId}')"
+          style="padding:13px 16px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:var(--rs);font-size:14px;color:var(--text2);cursor:pointer">📋</button>
+        ${notaId !== '__nueva' ? `<button onclick="eliminarNota('${notaId}')"
+          style="padding:13px 16px;background:#fff0f0;border:1.5px solid #fca5a5;border-radius:var(--rs);font-size:14px;color:var(--accent);cursor:pointer">🗑</button>` : ''}
+      </div>
+      <button onclick="document.getElementById('trabajoOverlay').classList.remove('open')"
+        style="width:100%;padding:11px;background:transparent;border:none;color:var(--text3);font-size:13px;cursor:pointer;margin-top:4px">Cerrar</button>`;
+    overlay.classList.add('open');
+    setTimeout(()=>{ document.getElementById('notasInput')?.focus(); }, 100);
+    return;
+  }
+
+  // Lista de notas
+  const total = notasDB.length;
   box.innerHTML = `
-    <div class="trabajo-title" style="color:var(--text)">📝 Notas de jornada</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Apuntes rápidos, incidencias, recordatorios...</div>
-    <textarea id="notasInput" rows="10" placeholder="Escribe tus notas aquí..."
-      style="width:100%;background:var(--bg3);border:1.5px solid var(--border2);border-radius:var(--rs);padding:12px 14px;font-size:14px;color:var(--text);outline:none;resize:none;font-family:var(--sans);line-height:1.6;box-sizing:border-box">${notasJornada}</textarea>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button onclick="guardarNotas()"
-        style="flex:1;padding:13px;background:var(--accent);border:2px solid var(--accent-dark);border-radius:var(--rs);color:white;font-size:14px;font-weight:700;cursor:pointer">
-        💾 Guardar
-      </button>
-      <button onclick="copiarNotas()"
-        style="padding:13px 16px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:var(--rs);font-size:14px;font-weight:600;color:var(--text2);cursor:pointer">
-        📋
-      </button>
-      <button onclick="if(confirm('¿Borrar todas las notas?')){notasJornada='';guardarStorage();document.getElementById('trabajoOverlay').classList.remove('open');renderContent();toast('🗑 Notas borradas')}"
-        style="padding:13px 16px;background:#fff0f0;border:1.5px solid #fca5a5;border-radius:var(--rs);font-size:14px;font-weight:600;color:var(--accent);cursor:pointer">
-        🗑
-      </button>
+    <div class="trabajo-title" style="color:var(--text);margin-bottom:4px">📝 Notas</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">${total} nota${total!==1?'s':''} guardada${total!==1?'s':''}</div>
+    ${total === 0 ? `<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Sin notas aún</div>` : ''}
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;margin-bottom:12px">
+      ${notasDB.map(n => `
+        <div onclick="abrirModalNotas('${n.id}')"
+          style="background:var(--bg3);border:1.5px solid var(--border2);border-radius:10px;padding:10px 12px;cursor:pointer">
+          <div style="font-weight:700;font-size:14px;color:var(--text)">${n.titulo||'Sin título'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${n.fecha||''} · ${(n.texto||'').substring(0,50)}${(n.texto||'').length>50?'...':''}</div>
+        </div>`).join('')}
     </div>
+    <button onclick="abrirModalNotas('__nueva')"
+      style="width:100%;padding:13px;background:var(--accent);border:2px solid var(--accent-dark);border-radius:var(--rs);color:white;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:6px">
+      ＋ Nueva nota
+    </button>
     <button onclick="document.getElementById('trabajoOverlay').classList.remove('open')"
-      style="width:100%;padding:11px;background:transparent;border:none;color:var(--text3);font-size:13px;cursor:pointer;margin-top:4px">
-      Cerrar
-    </button>`;
+      style="width:100%;padding:11px;background:transparent;border:none;color:var(--text3);font-size:13px;cursor:pointer">Cerrar</button>`;
   overlay.classList.add('open');
-  setTimeout(()=>{
-    const ta = document.getElementById('notasInput');
-    if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-  }, 100);
+}
+
+function guardarNota(notaId){
+  const titulo = document.getElementById('notaTitulo')?.value?.trim() || 'Sin título';
+  const texto  = document.getElementById('notasInput')?.value || '';
+  if(notaId === '__nueva'){
+    notasDB.push({ id:'n'+Date.now(), titulo, texto, fecha:getFecha() });
+  } else {
+    const idx = notasDB.findIndex(n => n.id === notaId);
+    if(idx >= 0) notasDB[idx] = { ...notasDB[idx], titulo, texto };
+  }
+  guardarStorage();
+  renderContent();
+  abrirModalNotas(); // volver a lista
+  toast('📝 Nota guardada');
+}
+
+function copiarNota(notaId){
+  const nota = notaId === '__nueva'
+    ? { titulo: document.getElementById('notaTitulo')?.value||'', texto: document.getElementById('notasInput')?.value||'' }
+    : notasDB.find(n => n.id === notaId);
+  if(!nota) return;
+  const txt = nota.titulo ? `${nota.titulo}\n\n${nota.texto}` : nota.texto;
+  navigator.clipboard.writeText(txt).catch(()=>{
+    const ta = document.createElement('textarea');
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  });
+  toast('📋 Nota copiada');
+}
+
+function eliminarNota(notaId){
+  if(!confirm('¿Eliminar esta nota?')) return;
+  notasDB = notasDB.filter(n => n.id !== notaId);
+  guardarStorage();
+  renderContent();
+  abrirModalNotas();
+  toast('🗑 Nota eliminada');
 }
 
 function guardarNotas(){
@@ -2621,8 +2808,7 @@ function crearAlarma(idx){
   const [h, m] = (t.hora||'07:15').split(':');
   const msg = encodeURIComponent(t.texto||'Tarea PycLibreta');
 
-  // Intentar abrir la app Reloj de Android directamente
-  // Funciona en Chrome Android >= 80
+  // intent:// con window.location funciona en Chrome Android
   const intentUrl = `intent:#Intent;action=android.intent.action.SET_ALARM;`
     + `S.android.intent.extra.alarm.MESSAGE=${msg};`
     + `i.android.intent.extra.alarm.HOUR=${parseInt(h)};`
@@ -2631,18 +2817,14 @@ function crearAlarma(idx){
     + `B.android.intent.extra.alarm.VIBRATE=true;`
     + `end`;
 
-  // Abrir en nueva pestaña para no perder contexto
-  const a = document.createElement('a');
-  a.href = intentUrl;
-  a.click();
+  window.location.href = intentUrl;
 
-  // Marcar tras delay
   setTimeout(()=>{
     t.alarmaCreada = true;
     guardarStorage();
     renderContent();
     toast('⏰ Reloj abierto — confirma la alarma');
-  }, 800);
+  }, 1000);
 }
 
 
@@ -3813,15 +3995,16 @@ function renderInforme(c){
   if(informeFotos.length > 0){
     h += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.5px;margin-bottom:8px">FOTOS (${informeFotos.length})</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">`;
-    informeFotos.forEach((foto, idx) => {
+    informeFotos.forEach((foto) => {
+      const fid = foto.id;
       h += `<div style="background:white;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;position:relative">
         <img src="${foto.base64}" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">
         <div style="padding:6px 8px">
-          <input value="${foto.nota||''}" placeholder="Nota (aviso, desc...)" 
-            onchange="informeFotos[${idx}].nota=this.value"
+          <input value="${(foto.nota||'').replace(/"/g,'&quot;')}" placeholder="Nota (aviso, desc...)" 
+            onchange="actualizarNotaFoto('${fid}',this.value)"
             style="width:100%;border:none;background:transparent;font-size:11px;color:var(--text2);font-family:var(--sans);outline:none;box-sizing:border-box">
         </div>
-        <button onclick="eliminarFotoInforme(${idx})" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:22px;height:22px;color:white;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+        <button onclick="eliminarFotoInforme('${fid}')" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:22px;height:22px;color:white;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
       </div>`;
     });
     h += `</div>`;
@@ -3838,6 +4021,11 @@ function renderInforme(c){
   c.innerHTML += h;
 }
 
+function actualizarNotaFoto(fid, valor){
+  const foto = informeFotos.find(f => f.id === fid);
+  if(foto) foto.nota = valor;
+}
+
 function añadirFotosInforme(input){
   const files = Array.from(input.files);
   if(!files.length) return;
@@ -3845,7 +4033,12 @@ function añadirFotosInforme(input){
   files.forEach(file => {
     const reader = new FileReader();
     reader.onload = e => {
-      informeFotos.push({ base64: e.target.result, nombre: file.name, nota: '' });
+      informeFotos.push({
+        id: 'f' + Date.now() + Math.random().toString(36).slice(2,6),
+        base64: e.target.result,
+        nombre: file.name,
+        nota: ''
+      });
       pending--;
       if(pending === 0){ renderContent(); toast(`📷 ${files.length} foto${files.length>1?'s':''} añadida${files.length>1?'s':''}`); }
     };
@@ -3853,8 +4046,8 @@ function añadirFotosInforme(input){
   });
 }
 
-function eliminarFotoInforme(idx){
-  informeFotos.splice(idx, 1);
+function eliminarFotoInforme(fid){
+  informeFotos = informeFotos.filter(f => f.id !== fid);
   renderContent();
 }
 
@@ -4042,10 +4235,10 @@ function calcularMTO(){
     const cliente = (r.Cliente||r.Entidad||'').trim();
     if(!cliente) return;
     const trabajo = r.Trabajo || r['Trabajo/Descripcion'] || '';
-    const estado  = (r.Estado||'').toLowerCase();
-    if(!estado.includes('finaliz')) return; // solo finalizados
 
+    // No filtrar por estado — incluir todos los registros del Diario
     const tipoDetectado = detectarMtoTipo(trabajo);
+    if(!tipoDetectado) return;
     if(!tipoDetectado) return;
 
     const clienteKey = cliente.toUpperCase().replace(/\s+/g,'_');
@@ -4104,12 +4297,24 @@ function renderMTO(c){
     porZona[d.zona].push({key, ...d});
   });
 
-  // Clientes sin datos en Diario pero conocidos — añadir si no están
+  // Clientes conocidos — añadir siempre aunque no tengan historial en Diario
   const clientesConocidos = [
-    {nombre:'BBVA', zona:'A'}, {nombre:'CAJAMAR', zona:'A'},
-    {nombre:'REPSOL', zona:'A'}, {nombre:'PLENERGY', zona:'A'},
-    {nombre:'SPRINTER', zona:'A'}, {nombre:'DIA', zona:'A'}
+    {nombre:'BBVA',     zona:'A'}, {nombre:'CAJAMAR',  zona:'A'},
+    {nombre:'REPSOL',   zona:'A'}, {nombre:'PLENERGY',  zona:'D'},
+    {nombre:'SPRINTER', zona:'A'}, {nombre:'DIA',       zona:'A'}
   ];
+  clientesConocidos.forEach(({nombre, zona}) => {
+    const key = nombre.toUpperCase().replace(/\s+/g,'_');
+    if(!porZona[zona]) porZona[zona] = [];
+    // Solo añadir si no viene ya del Diario
+    if(!porZona[zona].some(c => c.key === key)){
+      porZona[zona].push({
+        key, nombre, zona,
+        tipos: getMtoTipos(nombre),
+        fechas: {}
+      });
+    }
+  });
 
   let h = `<div class="section-pad" style="padding-bottom:20px">`;
 
@@ -4195,6 +4400,134 @@ function renderMTO(c){
   h += `</div>`;
   c.innerHTML += h;
 }
+
+function copiarContextoCopilot(){
+  const avisos = analisisResultado.filter(a => !a._separador);
+  if(!avisos.length){ toast('Analiza primero los avisos'); return; }
+  const lineas = avisos.map((a,i) =>
+    `${i+1}. ${a.cliente||''} · ${a.oficina||''} · ${a.localidad||''}\n   ${a.trabajo||a.trabajo_desc||'—'}\n   Estado: ${a.estado||'—'}  Aviso: ${a.aviso||'—'}`
+  ).join('\n\n');
+  const texto = `Soy técnico de seguridad Pycseca. Estos son mis avisos de hoy ${getFecha()}:\n\n${lineas}\n\n`;
+  navigator.clipboard.writeText(texto)
+    .then(()=>{ toast('✓ Copiado — abre Copilot y pega'); window.open('https://copilot.microsoft.com','_blank'); })
+    .catch(()=>{ 
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = texto; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      toast('✓ Copiado — abre Copilot y pega');
+      window.open('https://copilot.microsoft.com','_blank');
+    });
+}
+
+function toggleHistorial(id, btn){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const visible = el.style.display !== 'none';
+  el.style.display = visible ? 'none' : 'block';
+  const n = btn.textContent.match(/\d+/)?.[0] || '';
+  btn.textContent = visible 
+    ? `📋 Ver ${n} visita${n>1?'s':''} más` 
+    : `▲ Ocultar historial`;
+}
+
+function toggleInfoTec(id){
+  const el = document.getElementById(id);
+  const arr = document.getElementById('arr-'+id);
+  if(!el) return;
+  const visible = el.style.display !== 'none';
+  el.style.display = visible ? 'none' : 'block';
+  if(arr) arr.textContent = visible ? '🔑' : '🔓';
+}
+
+// ============================================================
+// INFO OCULTA — gestión de info técnica no deseada
+// ============================================================
+function hashInfo(texto){
+  // Hash simple del contenido para identificar la info
+  let h = 0;
+  for(let i=0; i<Math.min(texto.length,80); i++) h = (h*31 + texto.charCodeAt(i)) & 0xffffffff;
+  return 'i'+Math.abs(h).toString(36);
+}
+
+function categoriaAveria(texto){
+  const t = texto.toLowerCase();
+  if(/camara|cctv|ip.*cam|dvr|nvr|grabador/i.test(t)) return 'camaras';
+  if(/spider|programar|codigo.*maestro|maestro|codigo.*pro/i.test(t)) return 'spider';
+  if(/gsm|flex|alwon|comunicac|transmit|modem|sim/i.test(t)) return 'gsm';
+  if(/tamper/i.test(t)) return 'tamper';
+  if(/pci|incendio|extintor/i.test(t)) return 'pci';
+  if(/bateria|batería|tension/i.test(t)) return 'bateria';
+  if(/teclado|mando|codigo/i.test(t)) return 'teclado';
+  return 'general';
+}
+
+function infoEstaOculta(infoTexto, cliente, oficina, textoAveria){
+  const hash = hashInfo(infoTexto);
+  const catAveria = categoriaAveria(textoAveria);
+  return Object.values(infoOculta).some(r => {
+    if(r.hash !== hash) return false;
+    if(r.nivel === 'cliente')  return nrm(r.valor) === nrm(cliente||'');
+    if(r.nivel === 'oficina')  return nrm(r.valor) === nrm(oficina||'');
+    if(r.nivel === 'averia')   return r.tipoAveria === catAveria;
+    return false;
+  });
+}
+
+function ocultarInfo(infoTexto, cliente, oficina, textoAveria){
+  const hash    = hashInfo(infoTexto);
+  const catAv   = categoriaAveria(textoAveria);
+  const labelAv = {
+    camaras:'Cámaras/CCTV', spider:'Spider/programación', gsm:'GSM/comunicaciones',
+    tamper:'Tamper', pci:'PCI/incendios', bateria:'Batería', teclado:'Teclado/mando', general:'General'
+  }[catAv] || catAv;
+
+  // Modal de selección
+  const modal = document.createElement('div');
+  modal.id = 'modalOcultar';
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center`;
+  modal.innerHTML = `
+    <div style="background:white;border-radius:18px 18px 0 0;width:100%;max-width:480px;padding:20px 16px 32px;box-shadow:0 -4px 30px rgba(0,0,0,0.2)">
+      <div style="width:36px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 16px"></div>
+      <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px">🚫 Ocultar esta información</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;background:#f8f9fa;border-radius:8px;padding:8px 10px;line-height:1.4">"${infoTexto.substring(0,80)}${infoTexto.length>80?'...':''}"</div>
+      
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="confirmarOcultar('${hash}','averia','${catAv}',null,'${catAv}')" 
+          style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;text-align:left;cursor:pointer;font-family:var(--sans)">
+          <div style="font-weight:700;color:#ea580c;font-size:13px">🔧 Solo para averías de tipo "${labelAv}"</div>
+          <div style="font-size:11px;color:#9a3412;margin-top:2px">Si el aviso es de otro tipo, sí que la verás</div>
+        </button>
+        <button onclick="confirmarOcultar('${hash}','oficina','${oficina}',null,null)"
+          style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 14px;text-align:left;cursor:pointer;font-family:var(--sans)">
+          <div style="font-weight:700;color:#1d4ed8;font-size:13px">🏢 Solo para esta oficina (${oficina||cliente})</div>
+          <div style="font-size:11px;color:#1e3a8a;margin-top:2px">Nunca saldrá en esta oficina concreta</div>
+        </button>
+        <button onclick="confirmarOcultar('${hash}','cliente','${cliente}',null,null)"
+          style="background:#fdf4ff;border:1.5px solid #e9d5ff;border-radius:10px;padding:12px 14px;text-align:left;cursor:pointer;font-family:var(--sans)">
+          <div style="font-weight:700;color:#7c3aed;font-size:13px">👥 Para todo el cliente (${cliente})</div>
+          <div style="font-size:11px;color:#581c87;margin-top:2px">Nunca saldrá en ninguna oficina de ${cliente}</div>
+        </button>
+        <button onclick="document.getElementById('modalOcultar').remove()"
+          style="background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px;font-weight:700;color:#64748b;font-size:13px;cursor:pointer;font-family:var(--sans)">
+          Cancelar
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+}
+
+function confirmarOcultar(hash, nivel, valor, extra, tipoAveria){
+  const key = `${hash}_${nivel}_${valor}`;
+  infoOculta[key] = { hash, nivel, valor, tipoAveria };
+  guardarStorage();
+  document.getElementById('modalOcultar')?.remove();
+  renderContent();
+  toast('✅ Información ocultada — no volverá a aparecer');
+}
+
+
 
 function toggleMTO(clienteKey, tipo, fechaActual){
   if(!mtoManual[clienteKey]) mtoManual[clienteKey] = {};
@@ -5072,33 +5405,13 @@ async function enviarChatDrawer(){
   renderChatDrawer();
 
   try {
-    const messages = chatHistorial.slice(0,-1).map(m => {
-      if(m.role==='user'){
-        const content = [];
-        if(m.imgBase64) content.push({type:'image',source:{type:'base64',media_type:m.imgType||'image/jpeg',data:m.imgBase64}});
-        if(m.text && m.text !== '[imagen]') content.push({type:'text',text:m.text});
-        return {role:'user', content: content.length===1&&!m.imgBase64 ? m.text : content};
-      }
-      return {role:'assistant', content: m.content};
-    });
+    const messages = chatHistorial.slice(0,-1).map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.text || m.content || ''
+    }));
+    messages.push({ role:'user', content: ctx });
 
-    // Añadir mensaje actual con contexto
-    const lastContent = [];
-    if(userMsg.imgBase64) lastContent.push({type:'image',source:{type:'base64',media_type:userMsg.imgType||'image/jpeg',data:userMsg.imgBase64}});
-    lastContent.push({type:'text', text: ctx});
-    messages.push({role:'user', content: lastContent});
-
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-20250514', max_tokens:1500,
-        system: CHAT_SYSTEM,
-        messages
-      })
-    });
-    const data = await resp.json();
-    const respText = (data.content||[]).map(b=>b.text||'').join('');
+    const respText = await claudeChat(CHAT_SYSTEM, messages, 1500);
     chatHistorial.push({role:'assistant', content: respText});
   } catch(e) {
     chatHistorial.push({role:'assistant', content:'⚠️ Error al conectar. Comprueba conexión.'});
@@ -5234,20 +5547,24 @@ function abrirToDo(idx){
   if(!t) return;
   const texto = encodeURIComponent(t.texto||'Tarea PycLibreta');
   const fecha = t.fecha || '';
-  // ms-to-do:// funciona en Android si la app está instalada
-  // Fallback directo a web sin iframe (iframe bloqueado en Chrome)
+
+  // Intentar app nativa con link oculto (no navega fuera)
   const appUrl = `ms-to-do://tasks/new?title=${texto}${fecha?'&dueDate='+fecha:''}`;
-  
-  // Intentar app nativa primero
-  const start = Date.now();
-  window.location.href = appUrl;
-  
-  // Si en 1.5s no ha cambiado la página, abrir web como fallback
+  const link = document.createElement('a');
+  link.href = appUrl;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+
+  // Fallback a web tras 1.5s si la app no abrió
   setTimeout(()=>{
-    if(Date.now() - start < 2000){
+    document.body.removeChild(link);
+    // Solo abrir web si seguimos en la misma página (app no abrió)
+    if(document.visibilityState === 'visible'){
       window.open(`https://to-do.office.com/tasks/new?title=${texto}`, '_blank');
     }
   }, 1500);
+
   toast('✅ Abriendo Microsoft To Do...');
 }
 
