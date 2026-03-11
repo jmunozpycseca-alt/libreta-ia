@@ -268,13 +268,22 @@ body {
 .aviso-top {
   display: flex; align-items: center; padding: 10px 12px; gap: 8px; cursor: pointer;
 }
-.orden-btns { display: flex; flex-direction: column; gap: 2px; }
-.orden-btn {
-  width: 22px; height: 22px; background: var(--bg3); border: 1px solid var(--border);
-  border-radius: 4px; color: var(--text2); font-size: 10px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+.drag-handle {
+  width: 28px; min-height: 60px; display: flex; align-items: center; justify-content: center;
+  cursor: grab; flex-shrink: 0; touch-action: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 6px;
 }
-.orden-btn:active { background: var(--border2); }
+.drag-handle:active { cursor: grabbing; background: var(--bg3); }
+.drag-ghost {
+  position: fixed; z-index: 9999; pointer-events: none;
+  opacity: 0.85; transform: scale(1.03);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.22);
+  border-radius: 12px; background: white;
+  left: 0; top: 0; width: calc(100% - 32px); padding: 10px 14px;
+}
+.drag-over-top { border-top: 3px solid var(--accent) !important; }
+.drag-over-bottom { border-bottom: 3px solid var(--accent) !important; }
 .aviso-num-circle {
   width: 36px; height: 36px; background: var(--bg3); border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -865,7 +874,12 @@ let informeFotos = []; // [{id, base64, nombre, nota}]
 let notasJornada = ''; // nota activa (compatibilidad)
 let notasDB = [];      // [{id, titulo, texto, fecha}] — notas múltiples
 let mtoManual = {};   // {clienteKey: {Q1:'DD/MM',Q2:'DD/MM',...}} overrides manuales
+let mtoExtintores = {}; // {clienteKey: {polvo:N, co2:N}}
 let infoOculta = {};  // {hash: {nivel:'averia'|'oficina'|'cliente', valor, tipoAveria?}}
+let clientesDB = [];  // [{zona, cliente, codigo, direccion, municipio, provincia, revisiones:{INT,PCI1,PCI2,PCI3,PCI4}}]
+let clientesCargado = false;
+let mtoFiltro = 'todos'; // 'todos' | 'pendientes'
+let mtoZonaFiltro = 'todas';
 
 // ── IA — GEMINI VIA CLOUDFLARE PROXY ─────────────────────────
 const PROXY_URL = 'https://pycseca-ia.jmunoz-pycseca.workers.dev';
@@ -1008,7 +1022,7 @@ const ZONA_MUNICIPIOS = {
   "chiva": "7", "cofrentes": "7", "cuevas utiel": "7",
   "godelleta": "7", "loriguilla": "7", "montroi/montroy": "7",
   "montserrat": "7", "requena": "7", "siete aguas": "7",
-  "sinarcas": "7", "torrent": "7", "torrente": "7", "turis": "7",
+  "sinarcas": "7", "turis": "7",
   "utiel": "7", "venta del moro": "7",
 
   // Cuenca · Albacete (zona 8 — nueva)
@@ -1073,9 +1087,11 @@ function guardarStorage(){
     localStorage.setItem('rt_notas', notasJornada);
     localStorage.setItem('rt_notasDB', JSON.stringify(notasDB));
     localStorage.setItem('rt_mto', JSON.stringify(mtoManual));
+    localStorage.setItem('rt_mto_ext', JSON.stringify(mtoExtintores));
     localStorage.setItem('rt_infoOculta', JSON.stringify(infoOculta));
     if(diarioCargado) localStorage.setItem('rt_diario_ok','1');
     if(infoCargado)   localStorage.setItem('rt_info_ok','1');
+    if(clientesCargado) localStorage.setItem('rt_clientes_ok','1');
   } catch(e){}
 }
 
@@ -1105,10 +1121,14 @@ function cargarStorage(){
     if(notas) notasJornada = notas;
     const mto = localStorage.getItem('rt_mto');
     if(mto) mtoManual = JSON.parse(mto);
+    const mtoExt = localStorage.getItem('rt_mto_ext');
+    if(mtoExt) mtoExtintores = JSON.parse(mtoExt);
     const io = localStorage.getItem('rt_infoOculta');
     if(io) infoOculta = JSON.parse(io);
     const ndb = localStorage.getItem('rt_notasDB');
     if(ndb) notasDB = JSON.parse(ndb);
+    const cli = localStorage.getItem('rt_clientes');
+    if(cli){ clientesDB = JSON.parse(cli); clientesCargado = localStorage.getItem('rt_clientes_ok')==='1'; }
     // Migrar nota antigua si existe
     const notasOld = localStorage.getItem('rt_notas');
     if(notasOld && notasOld.trim() && notasDB.length === 0){
@@ -1601,6 +1621,87 @@ function cargarInfo(input){
     } catch(err) {
       console.error(err);
       toast('Error al leer Info2026.xlsx');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+// ============================================================
+// CARGAR CLIENTES.XLSX — MTO
+// ============================================================
+function cargarClientes(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      clientesDB = [];
+
+      wb.SheetNames.forEach(sheetName => {
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, {defval:'', raw:false});
+        if(!rows.length) return;
+
+        // Detectar tipo de hoja por columnas
+        const cols = Object.keys(rows[0]||{}).map(c=>c.trim().toUpperCase());
+        const esBBVA_Caja = cols.includes('REV INTRU') || cols.some(c=>c.includes('PCI'));
+        const esDia = cols.includes('FECHA REVISION') || cols.some(c=>c.includes('FECHA'));
+
+        // Extraer número de zona de nombre hoja (ej: "ZONA 3B" → zona=3)
+        const zonaMatch = sheetName.match(/(\d+)/);
+        const zonaNum = zonaMatch ? parseInt(zonaMatch[1]) : 0;
+
+        rows.forEach(r => {
+          // Usar zonaNum del nombre de hoja, no la columna ZONA (que puede ser número o vacío)
+          const zona    = String(zonaNum);
+          const cliente = String(r['CLIENTE']||r['Cliente']||'').trim().toUpperCase();
+          const codigo  = String(r['CODIGO']||r['Codigo']||r['CÓDIGO']||r['Código']||'').trim();
+          const dir     = String(r['DIRECCION']||r['Dirección']||r['DIRECCIÓN']||r['Direccion']||'').trim();
+          const muni    = String(r['MUNICIPIO']||r['Municipio']||'').trim();
+          const prov    = String(r['PROVINCIA']||r['Provincia']||'').trim();
+          const obs     = String(r['OBSERVACIONES']||r['OBSERVACONES']||r['Observaciones']||'').trim();
+
+          if(!cliente || !codigo) return;
+
+          // Parsear fechas de revisión existentes
+          const fmtFecha = v => {
+            if(!v) return '';
+            const s = String(v).trim();
+            if(!s || s==='0' || s.toLowerCase()==='null') return '';
+            // Si es fecha Excel (número) ya viene como string de fecha
+            // Normalizar a DD/MM/YYYY o DD/MM
+            const match = s.match(/(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?/);
+            if(match) return match[1].padStart(2,'0')+'/'+match[2].padStart(2,'0')+(match[3]?'/'+match[3]:'');
+            return s.substring(0,10);
+          };
+
+          const revisiones = {};
+          if(esBBVA_Caja){
+            revisiones.INT  = fmtFecha(r['REV INTRU']||r['Rev Intru']||'');
+            revisiones.PCI1 = fmtFecha(r['REV 1 PCI']||r['Rev 1 Pci']||r['REV1PCI']||'');
+            revisiones.PCI2 = fmtFecha(r['REV 2 PCI']||r['Rev 2 Pci']||'');
+            revisiones.PCI3 = fmtFecha(r['REV 3 PCI']||r['Rev 3 Pci']||'');
+            revisiones.PCI4 = fmtFecha(r['REV 4 PCI']||r['Rev 4 Pci']||'');
+          } else {
+            // Día — solo INT
+            revisiones.INT = fmtFecha(r['FECHA REVISION ']||r['FECHA REVISION']||r['Fecha Revision']||'');
+          }
+
+          clientesDB.push({ zona, cliente, codigo, direccion:dir, municipio:muni, provincia:prov, obs, revisiones, _sheet:sheetName });
+        });
+      });
+
+      clientesCargado = true;
+      localStorage.setItem('rt_clientes', JSON.stringify(clientesDB));
+      localStorage.setItem('rt_clientes_fecha', getFecha());
+      localStorage.setItem('rt_clientes_ok', '1');
+      renderContent();
+      toast(`✓ Clientes cargado: ${clientesDB.length} oficinas en ${wb.SheetNames.length} hojas`);
+    } catch(err) {
+      console.error(err);
+      toast('Error al leer Clientes.xlsx');
     }
   };
   reader.readAsArrayBuffer(file);
@@ -2410,11 +2511,14 @@ function renderMiRuta(c){
     h += `<div class="swipe-wrapper" id="sw-${idx}">
       <div class="delete-bg">🗑</div>
       <div class="aviso-card card-${ec}${avisoSeleccionado===idx?' card-selected':''}" id="card-${idx}"
-           ontouchstart="swipeStart(event,${idx})" ontouchmove="swipeMove(event,${idx})" ontouchend="swipeEnd(event,${idx})">
+           ontouchstart="swipeStart(event,${idx})" ontouchmove="swipeMove(event,${idx})" ontouchend="swipeEnd(event,${idx})"
+           data-idx="${idx}">
         <div class="aviso-top">
-          <div class="orden-btns">
-            <button class="orden-btn" onclick="moverArriba(${idx});event.stopPropagation()">▲</button>
-            <button class="orden-btn" onclick="moverAbajo(${idx});event.stopPropagation()">▼</button>
+          <div class="drag-handle" id="dh-${idx}" 
+               ontouchstart="dragStart(event,${idx})" 
+               ontouchend="dragEnd(event)"
+               onclick="event.stopPropagation()">
+            <span style="font-size:18px;color:var(--text3);letter-spacing:-2px">⠿</span>
           </div>
           <div class="aviso-num-circle${avisoSeleccionado===idx?' selected':''}" onclick="seleccionarAviso(${idx});event.stopPropagation()">${numAviso}</div>
           <div class="aviso-info" onclick="toggleCard(${idx})">
@@ -2461,6 +2565,10 @@ function renderMiRuta(c){
 
   c.innerHTML += h;
   iniciarSwipe();
+  // Registrar touchmove no-pasivo en handles para poder preventDefault
+  document.querySelectorAll('.drag-handle').forEach(dh => {
+    dh.addEventListener('touchmove', dragMove, { passive: false });
+  });
 }
 
 
@@ -2808,7 +2916,6 @@ function crearAlarma(idx){
   const [h, m] = (t.hora||'07:15').split(':');
   const msg = encodeURIComponent(t.texto||'Tarea PycLibreta');
 
-  // intent:// con window.location funciona en Chrome Android
   const intentUrl = `intent:#Intent;action=android.intent.action.SET_ALARM;`
     + `S.android.intent.extra.alarm.MESSAGE=${msg};`
     + `i.android.intent.extra.alarm.HOUR=${parseInt(h)};`
@@ -2817,14 +2924,18 @@ function crearAlarma(idx){
     + `B.android.intent.extra.alarm.VIBRATE=true;`
     + `end`;
 
-  window.location.href = intentUrl;
+  // Usar <a> sin target para no abrir pestaña nueva
+  // Chrome Android lanza el intent sin salir de la app PWA
+  const a = document.createElement('a');
+  a.href = intentUrl;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 
-  setTimeout(()=>{
-    t.alarmaCreada = true;
-    guardarStorage();
-    renderContent();
-    toast('⏰ Reloj abierto — confirma la alarma');
-  }, 1000);
+  t.alarmaCreada = true;
+  guardarStorage();
+  renderContent();
+  toast('⏰ Alarma enviada al reloj — confirma en la app Reloj');
 }
 
 
@@ -3878,7 +3989,7 @@ function renderCierre(c){
       📋 INFO
     </button>
     <button onclick="subTabArchivar='informe';renderContent()" style="flex:1;padding:12px 4px;background:${subTabArchivar==='informe'?'var(--accent)':'var(--bg2)'};color:${subTabArchivar==='informe'?'white':'var(--accent)'};border:none;border-left:2px solid var(--accent);font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer">
-      📷 PDF${informeFotos.length>0?` <span style="background:${subTabArchivar==='informe'?'rgba(255,255,255,0.3)':'var(--accent)'};color:white;border-radius:10px;padding:1px 5px;font-size:10px">${informeFotos.length}</span>`:''}
+      📷 ESCÁN${informeFotos.length>0?` <span style="background:${subTabArchivar==='informe'?'rgba(255,255,255,0.3)':'var(--accent)'};color:white;border-radius:10px;padding:1px 5px;font-size:10px">${informeFotos.length}</span>`:''}
     </button>
     <button onclick="subTabArchivar='mto';renderContent()" style="flex:1;padding:12px 4px;background:${subTabArchivar==='mto'?'var(--accent)':'var(--bg2)'};color:${subTabArchivar==='mto'?'white':'var(--accent)'};border:none;border-left:2px solid var(--accent);font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer">
       🔧 MTO
@@ -3955,70 +4066,130 @@ function renderCierre(c){
     <div class="cierre-label">TEXTO TABULADO — hoja 2026-${mesStr}</div>
     <textarea class="cierre-box" id="cierreText" readonly rows="6">${textoCompleto}</textarea>
     <button class="btn-primary" style="margin-top:10px" onclick="copiarCierre()">📋 Copiar para Excel</button>
-    <button onclick="abrirModalNotas()" style="margin-top:8px;width:100%;padding:13px;background:white;border:2px solid var(--border2);border-radius:12px;font-size:14px;font-weight:700;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
-      📝 <span>Notas de jornada${notasJornada?` <span style="background:var(--accent);color:white;border-radius:8px;padding:1px 7px;font-size:11px">✓</span>`:''}
-    </button>
     <button class="btn-reset" onclick="confirmarReset()">🗑 Nueva jornada</button>
   </div>`;
 }
 
 // ============================================================
-// INFORME PDF CON FOTOS
+// ESCÁNER PDF — fotos de documentos → PDF
 // ============================================================
 function renderInforme(c){
-  const avisos = tabla.filter(f=>!f._separador);
   const fecha = getFecha();
 
   let h = `<div class="section-pad">
 
-    <!-- Cabecera info -->
+    <!-- Cabecera -->
     <div style="background:white;border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:28px">📄</div>
+      <div style="font-size:28px">📷</div>
       <div>
-        <div style="font-weight:800;font-size:14px;color:var(--text)">Informe de jornada · ${fecha}</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">${avisos.length} avisos · ${informeFotos.length} foto${informeFotos.length!==1?'s':''} añadida${informeFotos.length!==1?'s':''}</div>
+        <div style="font-weight:800;font-size:14px;color:var(--text)">Escáner de documentos</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Fotografía documentos y genera un PDF para enviar · ${fecha}</div>
       </div>
     </div>
 
-    <!-- Añadir fotos -->
-    <div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.5px;margin-bottom:8px">AÑADIR FOTOS</div>
-    <label style="display:flex;align-items:center;justify-content:center;gap:10px;background:white;border:2px dashed var(--border2);border-radius:12px;padding:18px;cursor:pointer;margin-bottom:12px">
-      <span style="font-size:28px">📷</span>
+    <!-- Botón añadir foto -->
+    <label style="display:flex;align-items:center;justify-content:center;gap:10px;background:var(--accent);border:none;border-radius:12px;padding:16px;cursor:pointer;margin-bottom:12px">
+      <span style="font-size:26px">📸</span>
       <div>
-        <div style="font-size:14px;font-weight:700;color:var(--text2)">Toca para añadir foto</div>
-        <div style="font-size:12px;color:var(--text3)">Cámara o galería</div>
+        <div style="font-size:15px;font-weight:800;color:white">Fotografiar documento</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.8)">${informeFotos.length > 0 ? informeFotos.length + ' página' + (informeFotos.length>1?'s':'') + ' añadida' + (informeFotos.length>1?'s':'') : 'Toca para abrir cámara'}</div>
       </div>
-      <input type="file" accept="image/*" multiple capture="environment" onchange="añadirFotosInforme(this)" style="display:none">
+      <input type="file" accept="image/*" capture="environment" onchange="añadirFotosInforme(this)" style="display:none">
+    </label>
+    
+    <!-- También desde galería -->
+    <label style="display:flex;align-items:center;justify-content:center;gap:8px;background:white;border:1.5px solid var(--border2);border-radius:10px;padding:11px;cursor:pointer;margin-bottom:14px">
+      <span style="font-size:18px">🖼️</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text2)">Añadir desde galería</span>
+      <input type="file" accept="image/*" multiple onchange="añadirFotosInforme(this)" style="display:none">
     </label>`;
 
-  // Galería de fotos añadidas
+  // Páginas añadidas
   if(informeFotos.length > 0){
-    h += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.5px;margin-bottom:8px">FOTOS (${informeFotos.length})</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">`;
-    informeFotos.forEach((foto) => {
+    h += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.5px;margin-bottom:8px">PÁGINAS DEL DOCUMENTO (${informeFotos.length})</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">`;
+    informeFotos.forEach((foto, idx) => {
       const fid = foto.id;
-      h += `<div style="background:white;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;position:relative">
-        <img src="${foto.base64}" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">
-        <div style="padding:6px 8px">
-          <input value="${(foto.nota||'').replace(/"/g,'&quot;')}" placeholder="Nota (aviso, desc...)" 
+      h += `<div style="background:white;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;display:flex;gap:10px;align-items:center;padding:8px">
+        <img src="${foto.base64}" style="width:70px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:4px">Página ${idx+1}</div>
+          <input value="${(foto.nota||'').replace(/"/g,'&quot;')}" placeholder="Descripción (opcional)..." 
             onchange="actualizarNotaFoto('${fid}',this.value)"
-            style="width:100%;border:none;background:transparent;font-size:11px;color:var(--text2);font-family:var(--sans);outline:none;box-sizing:border-box">
+            style="width:100%;border:1px solid var(--border2);background:var(--bg3);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--text);font-family:var(--sans);outline:none;box-sizing:border-box">
         </div>
-        <button onclick="eliminarFotoInforme('${fid}')" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:22px;height:22px;color:white;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          ${idx > 0 ? `<button onclick="moverFotoArriba('${fid}')" style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:14px;cursor:pointer">↑</button>` : ''}
+          <button onclick="eliminarFotoInforme('${fid}')" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:5px 8px;font-size:14px;cursor:pointer">🗑</button>
+        </div>
       </div>`;
     });
     h += `</div>`;
+
+    // Botón generar PDF
+    h += `<button onclick="generarPDFEscaner()" 
+      style="width:100%;padding:15px;background:var(--accent);border:none;border-radius:12px;font-size:15px;font-weight:800;color:white;cursor:pointer;box-shadow:0 3px 12px rgba(139,26,26,0.3);margin-bottom:8px">
+      📄 Generar PDF (${informeFotos.length} página${informeFotos.length>1?'s':''})
+    </button>
+    <button onclick="informeFotos=[];renderContent()" style="width:100%;padding:10px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:10px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer">
+      🗑 Limpiar todo
+    </button>`;
   }
 
-  // Botón generar PDF
-  h += `<button onclick="generarPDF()" 
-    style="width:100%;padding:14px;background:var(--accent);border:none;border-radius:12px;font-size:15px;font-weight:800;color:white;cursor:pointer;box-shadow:0 3px 12px rgba(139,26,26,0.3);margin-bottom:8px">
-    📄 Generar PDF del informe
-  </button>
-  ${informeFotos.length>0?`<button onclick="informeFotos=[];renderContent()" style="width:100%;padding:10px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:10px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer">🗑 Limpiar fotos</button>`:''}
-  </div>`;
-
+  h += `</div>`;
   c.innerHTML += h;
+}
+
+function moverFotoArriba(fid){
+  const idx = informeFotos.findIndex(f => f.id === fid);
+  if(idx <= 0) return;
+  [informeFotos[idx-1], informeFotos[idx]] = [informeFotos[idx], informeFotos[idx-1]];
+  renderContent();
+}
+
+async function generarPDFEscaner(){
+  if(informeFotos.length === 0){ toast('Añade fotos primero'); return; }
+  const { jsPDF } = window.jspdf;
+  if(!jsPDF){ toast('Error: jsPDF no disponible'); return; }
+
+  toast('⏳ Generando PDF...');
+
+  // Cada foto ocupa una página A4
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const W = 210, H = 297, margin = 8;
+
+  for(let i = 0; i < informeFotos.length; i++){
+    if(i > 0) doc.addPage();
+    const foto = informeFotos[i];
+    try {
+      let imgData = foto.base64;
+      let imgFmt = 'JPEG';
+      if(imgData.startsWith('data:')){
+        const mime = imgData.split(';')[0].split(':')[1];
+        if(mime === 'image/png') imgFmt = 'PNG';
+        imgData = imgData.split(',')[1];
+      }
+      // Calcular dimensiones manteniendo proporción
+      const imgW = W - margin*2;
+      const imgH = H - margin*2;
+      doc.addImage(imgData, imgFmt, margin, margin, imgW, imgH, undefined, 'FAST');
+      // Nota pequeña si tiene
+      if(foto.nota){
+        doc.setFillColor(0,0,0,0.5);
+        doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+        doc.text(foto.nota.substring(0,60), margin+2, H-3);
+      }
+    } catch(e){
+      doc.setFillColor(240,240,245);
+      doc.rect(margin, margin, W-margin*2, H-margin*2, 'F');
+      doc.setFontSize(10); doc.setTextColor(150,150,170);
+      doc.text('Error al cargar imagen', W/2, H/2, {align:'center'});
+    }
+  }
+
+  const fecha = getFecha().replace(/\//g,'-');
+  doc.save(`documento_${fecha}.pdf`);
+  toast(`✅ PDF generado · ${informeFotos.length} página${informeFotos.length>1?'s':''}`);
 }
 
 function actualizarNotaFoto(fid, valor){
@@ -4049,102 +4220,6 @@ function añadirFotosInforme(input){
 function eliminarFotoInforme(fid){
   informeFotos = informeFotos.filter(f => f.id !== fid);
   renderContent();
-}
-
-async function generarPDF(){
-  const { jsPDF } = window.jspdf;
-  if(!jsPDF){ toast('Error: jsPDF no disponible'); return; }
-
-  toast('⏳ Generando PDF...');
-  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-  const W = 210, margin = 14;
-  let y = margin;
-
-  // ── CABECERA ──────────────────────────────────────────────
-  doc.setFillColor(139, 26, 26);
-  doc.rect(0, 0, W, 28, 'F');
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(16); doc.setFont('helvetica','bold');
-  doc.text('PYCSECA · Informe de Jornada', margin, 11);
-  doc.setFontSize(10); doc.setFont('helvetica','normal');
-  doc.text(`Fecha: ${getFecha()}  ·  Técnico: J. Muñoz`, margin, 20);
-  y = 36;
-
-  // ── RESUMEN AVISOS ────────────────────────────────────────
-  const avisos = tabla.filter(f=>!f._separador);
-  doc.setTextColor(30,30,50);
-  doc.setFontSize(11); doc.setFont('helvetica','bold');
-  doc.text(`Avisos del día: ${avisos.length}  |  Finalizados: ${avisos.filter(f=>f.estado==='Finalizado').length}`, margin, y);
-  y += 8;
-
-  // ── LISTA DE AVISOS ───────────────────────────────────────
-  avisos.forEach((f, i) => {
-    if(y > 265){ doc.addPage(); y = margin; }
-    doc.setFillColor(248,249,250);
-    doc.rect(margin, y, W-margin*2, 18, 'F');
-    doc.setDrawColor(220,220,235);
-    doc.rect(margin, y, W-margin*2, 18, 'S');
-    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(139,26,26);
-    doc.text(`${i+1}. ${f.cliente||''}${f.oficina?' · '+f.oficina:''}`, margin+3, y+6);
-    doc.setFont('helvetica','normal'); doc.setTextColor(60,60,80);
-    doc.text(`${f.direccion||'—'}  ·  ${f.localidad||''}`, margin+3, y+12);
-    doc.setTextColor(100,120,160);
-    doc.text(`Estado: ${f.estado||'—'}  ·  ${f.trabajo||f.trabajo_desc||''}`.substring(0,90), margin+3, y+17);
-    y += 22;
-  });
-
-  // ── FOTOS ─────────────────────────────────────────────────
-  if(informeFotos.length > 0){
-    if(y > 220){ doc.addPage(); y = margin; }
-    else y += 6;
-    doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.setTextColor(30,30,50);
-    doc.text('Evidencias fotográficas', margin, y); y += 8;
-
-    const fotoW = (W - margin*2 - 8) / 2;
-    const fotoH = fotoW * 0.75;
-    let col = 0;
-
-    for(const foto of informeFotos){
-      if(y + fotoH > 275){ doc.addPage(); y = margin; col = 0; }
-      const x = margin + col * (fotoW + 8);
-      try {
-        // Strip data URL prefix — jsPDF necesita base64 puro
-        let imgData = foto.base64;
-        let imgFmt = 'JPEG';
-        if(imgData.startsWith('data:')){
-          const mime = imgData.split(';')[0].split(':')[1];
-          if(mime === 'image/png') imgFmt = 'PNG';
-          imgData = imgData.split(',')[1];
-        }
-        doc.addImage(imgData, imgFmt, x, y, fotoW, fotoH, undefined, 'MEDIUM');
-        doc.setDrawColor(200,200,210); doc.rect(x, y, fotoW, fotoH, 'S');
-        if(foto.nota){
-          doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,100);
-          doc.text(foto.nota.substring(0,45), x+2, y+fotoH+4);
-        }
-      } catch(e){ 
-        // Imagen no válida — dibujar placeholder
-        doc.setFillColor(240,240,245);
-        doc.rect(x, y, fotoW, fotoH, 'F');
-        doc.setFontSize(8); doc.setTextColor(150,150,170);
-        doc.text('Imagen no disponible', x+4, y+fotoH/2);
-      }
-      col++;
-      if(col >= 2){ col = 0; y += fotoH + (foto.nota?10:6); }
-    }
-    if(col === 1) y += fotoH + 6;
-  }
-
-  // ── PIE ───────────────────────────────────────────────────
-  const pages = doc.internal.getNumberOfPages();
-  for(let p=1; p<=pages; p++){
-    doc.setPage(p);
-    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(160,160,180);
-    doc.text(`PycLibreta · Pycseca Seguridad · Página ${p}/${pages}`, margin, 292);
-  }
-
-  doc.save(`informe-pycseca-${getFecha().replace(/\//g,'-')}.pdf`);
-  toast('✅ PDF generado y descargado');
 }
 
 // ============================================================
@@ -4278,128 +4353,289 @@ function calcularMTO(){
 }
 
 function renderMTO(c){
-  if(!diarioCargado){
-    c.innerHTML += `<div class="empty" style="padding-top:40px">
-      <div class="empty-icon">🔧</div>
-      <div class="empty-title">Diario no cargado</div>
-      <div class="empty-sub">Carga el Diario_2026.xlsx en la pestaña ANÁLISIS primero</div>
+  if(!clientesCargado || clientesDB.length === 0){
+    c.innerHTML += `<div class="section-pad">
+      <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:20px;margin-bottom:16px;text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">📋</div>
+        <div style="font-weight:800;font-size:15px;color:var(--text);margin-bottom:6px">Carga el archivo Clientes.xlsx</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Solo necesitas cargarlo una vez — se guarda para siempre en la app</div>
+        <label style="display:inline-flex;align-items:center;gap:8px;background:var(--accent);border-radius:10px;padding:12px 20px;cursor:pointer;color:white;font-weight:700;font-size:14px">
+          📂 Cargar Clientes.xlsx
+          <input type="file" accept=".xlsx,.xls" onchange="cargarClientes(this)" style="display:none">
+        </label>
+      </div>
     </div>`;
     return;
   }
 
-  const datos = calcularMTO();
-  const anyo = new Date().getFullYear();
+  const hoy = new Date();
+  const hoyCorto = String(hoy.getDate()).padStart(2,'0')+'/'+String(hoy.getMonth()+1).padStart(2,'0');
 
-  // Agrupar por zona MTO
+  let totalHecho=0, totalPend=0, totalOfi=0;
+  clientesDB.forEach(ofi => {
+    if(mtoZonaFiltro !== 'todas' && mtoZonaFiltro !== ofi.zona) return;
+    if(busq){ const hay=(ofi.cliente+' '+ofi.codigo+' '+ofi.municipio+' '+(ofi.direccion||'')).toLowerCase(); if(!hay.includes(busq)) return; }
+    const man = mtoManual[mtoKeyOfi(ofi)]||{};
+    getMtoTiposOfi(ofi).forEach(t => {
+      totalOfi++;
+      if(man[t]||ofi.revisiones[t]) totalHecho++; else totalPend++;
+    });
+  });
+
+  const zonasDisp = [...new Set(clientesDB.map(o=>o.zona))].sort((a,b)=>parseInt(a)-parseInt(b));
+  const busq = (window._mtoBusq||'').toLowerCase();
+
+  let h = '<div class="section-pad" style="padding-bottom:80px">';
+
+  // Barra top
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
+  h += '<button onclick="mtoAbrirFormNuevo()" style="flex:1;padding:9px;background:var(--accent);border:none;border-radius:10px;color:white;font-weight:800;font-size:13px;cursor:pointer">＋ Nueva oficina</button>';
+  h += '<button onclick="mtoAbrirWhatsApp()" style="padding:9px 14px;background:#25d366;border:none;border-radius:10px;color:white;font-size:16px;font-weight:800;cursor:pointer">📤</button>';
+  h += '<label style="padding:9px 14px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text3);display:flex;align-items:center">🔄<input type="file" accept=".xlsx,.xls" onchange="cargarClientes(this)" style="display:none"></label>';
+  h += '</div>';
+
+  // Resumen
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">';
+  h += '<div style="background:var(--bg2);border:1.5px solid var(--border);border-radius:10px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--text)">'+totalOfi+'</div><div style="font-size:10px;color:var(--text3);font-weight:600">OFICINAS</div></div>';
+  h += '<div style="background:#dcfce7;border:1.5px solid #86efac;border-radius:10px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:800;color:#16a34a">'+totalHecho+'</div><div style="font-size:10px;color:#16a34a;font-weight:600">HECHAS</div></div>';
+  h += '<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:800;color:#ea580c">'+totalPend+'</div><div style="font-size:10px;color:#ea580c;font-weight:600">PENDIENTES</div></div>';
+  h += '</div>';
+
+  // Buscador
+  h += '<div style="position:relative;margin-bottom:10px">';
+  h += '<input id="mto-busq" type="text" placeholder="🔍 Buscar cliente, código, municipio…" value="'+(window._mtoBusq||'')+'" oninput="window._mtoBusq=this.value;renderContent()" style="width:100%;padding:10px 36px 10px 12px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text);font-family:var(--sans);box-sizing:border-box;outline:none">';
+  if(busq) h += '<button onclick="window._mtoBusq=\'\';renderContent()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>';
+  h += '</div>';
+
+  // Filtros
+  h += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+  h += '<button onclick="mtoFiltro=\'todos\';renderContent()" style="padding:5px 12px;background:'+(mtoFiltro==='todos'?'var(--accent)':'var(--bg2)')+';color:'+(mtoFiltro==='todos'?'white':'var(--text2)')+';border:1.5px solid '+(mtoFiltro==='todos'?'var(--accent-dark)':'var(--border2)')+';border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">Todos</button>';
+  h += '<button onclick="mtoFiltro=\'pendientes\';renderContent()" style="padding:5px 12px;background:'+(mtoFiltro==='pendientes'?'#ea580c':'var(--bg2)')+';color:'+(mtoFiltro==='pendientes'?'white':'var(--text2)')+';border:1.5px solid '+(mtoFiltro==='pendientes'?'#ea580c':'var(--border2)')+';border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">⚠ Pendientes</button>';
+  h += '<select onchange="mtoZonaFiltro=this.value;renderContent()" style="padding:5px 10px;background:'+(mtoZonaFiltro!=='todas'?'var(--accent)':'var(--bg2)')+';color:'+(mtoZonaFiltro!=='todas'?'white':'var(--text2)')+';border:1.5px solid var(--border2);border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;outline:none"><option value="todas">Zona: Todas</option>'+zonasDisp.map(z=>'<option value="'+z+'" '+(mtoZonaFiltro===z?'selected':'')+'>'+z+' — '+getNombreZona(z)+'</option>').join('')+'</select>';
+  h += '</div>';
+
+  // Agrupar por zona
   const porZona = {};
-  Object.entries(datos).forEach(([key, d]) => {
-    if(!porZona[d.zona]) porZona[d.zona] = [];
-    porZona[d.zona].push({key, ...d});
-  });
+  clientesDB.forEach(ofi => { if(!porZona[ofi.zona]) porZona[ofi.zona]=[]; porZona[ofi.zona].push(ofi); });
+  const zonasOrden = Object.keys(porZona).sort((a,b)=>parseInt(a)-parseInt(b));
+  let algunaVisible = false;
 
-  // Clientes conocidos — añadir siempre aunque no tengan historial en Diario
-  const clientesConocidos = [
-    {nombre:'BBVA',     zona:'A'}, {nombre:'CAJAMAR',  zona:'A'},
-    {nombre:'REPSOL',   zona:'A'}, {nombre:'PLENERGY',  zona:'D'},
-    {nombre:'SPRINTER', zona:'A'}, {nombre:'DIA',       zona:'A'}
-  ];
-  clientesConocidos.forEach(({nombre, zona}) => {
-    const key = nombre.toUpperCase().replace(/\s+/g,'_');
-    if(!porZona[zona]) porZona[zona] = [];
-    // Solo añadir si no viene ya del Diario
-    if(!porZona[zona].some(c => c.key === key)){
-      porZona[zona].push({
-        key, nombre, zona,
-        tipos: getMtoTipos(nombre),
-        fechas: {}
-      });
-    }
-  });
-
-  let h = `<div class="section-pad" style="padding-bottom:20px">`;
-
-  // Leyenda
-  h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-    <span style="background:#dcfce7;color:#16a34a;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700">✓ Hecho</span>
-    <span style="background:#fff7ed;color:#ea580c;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700">⚠ Pendiente</span>
-    <span style="background:#f1f5f9;color:#94a3b8;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700">— No aplica</span>
-    <span style="background:#ede9fe;color:#7c3aed;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700">✏ Manual</span>
-  </div>`;
-
-  const zonasOrden = ['A','B','C','D','E','F'];
   zonasOrden.forEach(zona => {
-    const clientes = porZona[zona];
-    if(!clientes || clientes.length === 0) return;
-
-    // Ordenar: BBVA, Cajamar, Repsol, resto
-    clientes.sort((a,b) => {
-      const orden = n => n.includes('BBVA')?0:n.includes('CAJAMAR')||n.includes('CAJA')?1:n.includes('REPSOL')?2:3;
-      return orden(a.nombre.toUpperCase()) - orden(b.nombre.toUpperCase());
+    if(mtoZonaFiltro !== 'todas' && mtoZonaFiltro !== zona) return;
+    let oficinas = porZona[zona].filter(ofi => {
+      if(busq){ const hay=(ofi.cliente+' '+ofi.codigo+' '+ofi.municipio+' '+(ofi.direccion||'')).toLowerCase(); if(!hay.includes(busq)) return false; }
+      if(mtoFiltro==='pendientes'){ const man=mtoManual[mtoKeyOfi(ofi)]||{}; return getMtoTiposOfi(ofi).some(t=>!(man[t]||ofi.revisiones[t])); }
+      return true;
     });
+    if(!oficinas.length) return;
+    algunaVisible = true;
 
-    h += `<div style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-        <div style="flex:1;height:1px;background:var(--border2)"></div>
-        ${MTO_ZONA_NOMBRE[zona]||zona}
-        <div style="flex:1;height:1px;background:var(--border2)"></div>
-      </div>`;
+    h += '<div style="margin-bottom:16px">';
+    h += '<div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><div style="flex:1;height:1px;background:var(--border2)"></div>Zona '+zona+' — '+getNombreZona(zona)+'<div style="flex:1;height:1px;background:var(--border2)"></div></div>';
 
-    clientes.forEach(({key, nombre, tipos, fechas}) => {
-      const cc = getColorCliente(nombre);
-      const manual = mtoManual[key] || {};
+    oficinas.forEach(ofi => {
+      const key = mtoKeyOfi(ofi);
+      const man = mtoManual[key]||{};
+      const tipos = getMtoTiposOfi(ofi);
+      const cc = getColorCliente(ofi.cliente);
+      const hechos = tipos.filter(t=>man[t]||ofi.revisiones[t]).length;
+      const pct = tipos.length ? Math.round(hechos/tipos.length*100) : 0;
+      const todoHecho = hechos===tipos.length;
+      const todoPend = hechos===0;
+      const ext = mtoExtintores[key]||{polvo:0,co2:0};
+      const hayExt = ext.polvo>0||ext.co2>0;
 
-      // Contar completados
-      const hechos = tipos.filter(t => fechas[t] || fechas[t+'_manual'] || manual[t]).length;
-      const pct = Math.round(hechos/tipos.length*100);
+      h += '<div style="background:white;border:1.5px solid '+cc.border+'40;border-left:4px solid '+cc.border+';border-radius:10px;margin-bottom:8px;overflow:hidden">';
+      h += '<div style="background:'+cc.bg+';padding:8px 12px">';
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">';
+      h += '<div style="font-weight:800;font-size:13px;color:'+(cc.txt||'var(--text)')+'">'+ofi.cliente+' · <span style="font-weight:600">'+ofi.codigo+'</span></div>';
+      h += '<div style="display:flex;align-items:center;gap:5px">';
+      // Extintores
+      h += '<div onclick="mtoEditarExtintores(\''+key+'\')" style="display:flex;align-items:center;gap:2px;background:'+(hayExt?'#fef2f2':'rgba(255,255,255,0.45)')+';border:1.5px solid '+(hayExt?'#fca5a5':'rgba(0,0,0,0.08)')+';border-radius:7px;padding:2px 6px;cursor:pointer">';
+      h += '<span style="font-size:12px">🧯</span><span style="font-size:10px;font-weight:800;color:'+(hayExt?'#dc2626':'#94a3b8')+'">'+(ext.polvo||0)+'<span style="opacity:0.35">·</span>'+(ext.co2||0)+'</span></div>';
+      // Progreso
+      h += '<div style="font-size:11px;font-weight:700;color:'+(todoHecho?'#16a34a':todoPend?'#ea580c':'#d97706')+'">'+hechos+'/'+tipos.length+'</div>';
+      h += '<div style="width:30px;height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+(todoHecho?'#16a34a':hechos>0?'#f59e0b':'#e5e7eb')+';border-radius:3px"></div></div>';
+      h += '<button onclick="mtoEliminarOfi(\''+key+'\');event.stopPropagation()" style="background:none;border:none;font-size:13px;cursor:pointer;opacity:0.35;padding:2px 3px">✕</button>';
+      h += '</div></div>';
+      h += '<div style="font-size:11px;color:'+(cc.txt||'var(--text3)')+';opacity:0.8">'+ofi.municipio+(ofi.direccion?' · '+ofi.direccion.substring(0,38):'')+'</div>';
+      h += '</div>';
 
-      h += `<div style="background:white;border:1.5px solid ${cc.border}30;border-left:4px solid ${cc.border};border-radius:10px;margin-bottom:8px;overflow:hidden">
-        <!-- Cabecera cliente -->
-        <div style="background:${cc.bg};padding:8px 12px;display:flex;align-items:center;justify-content:space-between">
-          <div style="font-weight:800;font-size:14px;color:${cc.txt||'var(--text)'}"> ${nombre}</div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <div style="font-size:11px;font-weight:700;color:${pct===100?'#16a34a':pct>0?'#ea580c':'#94a3b8'}">${hechos}/${tipos.length}</div>
-            <div style="width:40px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden">
-              <div style="width:${pct}%;height:100%;background:${pct===100?'#16a34a':pct>0?'#ea580c':'#e5e7eb'};border-radius:3px"></div>
-            </div>
-          </div>
-        </div>
-        <!-- Chips de mantenimientos -->
-        <div style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px">
-          ${tipos.map(tipo => {
-            const fechaAuto   = fechas[tipo];
-            const fechaManual = fechas[tipo+'_manual'] || manual[tipo];
-            const hecho       = fechaAuto || fechaManual;
-            const esManual    = !!fechaManual && !fechaAuto;
-            const fechaTexto  = fechaManual || (fechaAuto ? fmtFechaMto(fechaAuto) : null);
+      // Chips
+      h += '<div style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:5px">';
+      tipos.forEach(tipo => {
+        const fechaExcel=ofi.revisiones[tipo]||'';
+        const fechaMan=man[tipo]||'';
+        const fecha=fechaMan||fechaExcel;
+        const esExcel=!!fechaExcel&&!fechaMan;
+        const esMan=!!fechaMan;
+        const bg=fecha?(esExcel?'#dbeafe':esMan?'#ede9fe':'#dcfce7'):'#fff7ed';
+        const bd=fecha?(esExcel?'#93c5fd':esMan?'#a78bfa':'#86efac'):'#fed7aa';
+        const col=fecha?(esExcel?'#1d4ed8':esMan?'#7c3aed':'#16a34a'):'#ea580c';
+        h += '<div onclick="toggleMTOOfi(\''+key+'\',\''+tipo+'\',\''+ofi.cliente+'\',\''+ofi.codigo+'\')" style="display:flex;flex-direction:column;align-items:center;gap:1px;background:'+bg+';border:1.5px solid '+bd+';border-radius:8px;padding:5px 10px;cursor:pointer;min-width:46px">';
+        h += '<span style="font-size:10px;font-weight:800;color:'+col+'">'+tipo+'</span>';
+        h += '<span style="font-size:10px;font-weight:600;color:'+col+'">'+( fecha||'—')+'</span>';
+        h += '</div>';
+      });
+      h += '</div>';
 
-            return `<div onclick="toggleMTO('${key}','${tipo}','${fechaTexto||''}')"
-              style="display:flex;flex-direction:column;align-items:center;gap:1px;
-              background:${hecho?(esManual?'#ede9fe':'#dcfce7'):'#fff7ed'};
-              border:1.5px solid ${hecho?(esManual?'#a78bfa':'#86efac'):'#fed7aa'};
-              border-radius:8px;padding:5px 10px;cursor:pointer;min-width:52px">
-              <span style="font-size:10px;font-weight:800;color:${hecho?(esManual?'#7c3aed':'#16a34a'):'#ea580c'}">${tipo}</span>
-              <span style="font-size:10px;font-weight:600;color:${hecho?(esManual?'#7c3aed':'#16a34a'):'#d97706'}">${fechaTexto||(hecho?'✓':'—')}</span>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>`;
+      if(ofi.obs) h += '<div style="padding:4px 12px 8px;font-size:11px;color:var(--text3);font-style:italic">'+ofi.obs+'</div>';
+      h += '</div>';
     });
-
-    h += `</div>`;
+    h += '</div>';
   });
 
-  // Si no hay datos
-  if(Object.keys(datos).length === 0){
-    h += `<div style="text-align:center;padding:30px 20px;color:var(--text3)">
-      <div style="font-size:32px;margin-bottom:8px">🔧</div>
-      <div style="font-weight:700;margin-bottom:4px">Sin mantenimientos detectados</div>
-      <div style="font-size:13px">El Diario no tiene registros de revisiones anuales o trimestrales finalizados</div>
-    </div>`;
+  if(!algunaVisible){
+    h += '<div style="text-align:center;padding:30px 20px;color:var(--text3)"><div style="font-size:32px;margin-bottom:8px">🔍</div><div style="font-weight:700">Sin resultados</div></div>';
   }
 
-  h += `</div>`;
+  h += '</div>';
+
+  // Overlays
+  h += '<div id="mto-form-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;align-items:flex-end"><div style="background:var(--bg);border-radius:20px 20px 0 0;padding:20px;width:100%;box-sizing:border-box;max-height:90vh;overflow-y:auto"><div style="font-weight:800;font-size:16px;margin-bottom:14px">➕ Nueva oficina</div><div style="display:flex;flex-direction:column;gap:10px"><div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">CLIENTE</div><input id="mto-new-cliente" placeholder="BBVA / CAJAMAR / DIA…" style="width:100%;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:14px;color:var(--text);box-sizing:border-box;outline:none"></div><div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">CÓDIGO</div><input id="mto-new-codigo" placeholder="0182-XXXX" style="width:100%;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:14px;color:var(--text);box-sizing:border-box;outline:none"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">MUNICIPIO</div><input id="mto-new-muni" placeholder="Valencia" style="width:100%;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:14px;color:var(--text);box-sizing:border-box;outline:none"></div><div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">ZONA</div><select id="mto-new-zona" style="width:100%;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:14px;color:var(--text);box-sizing:border-box;outline:none"><option value="1">1 — Valencia Ciudad</option><option value="2">2 — Valencia Norte</option><option value="3">3 — Valencia Oeste</option><option value="4">4 — Valencia Sur</option><option value="5">5 — Ribera·Safor</option><option value="6">6 — Castellón</option></select></div></div><div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">DIRECCIÓN</div><input id="mto-new-dir" placeholder="Calle Mayor, 1" style="width:100%;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:14px;color:var(--text);box-sizing:border-box;outline:none"></div><div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">OBSERVACIONES</div><input id="mto-new-obs" placeholder="Opcional" style="width:100%;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:14px;color:var(--text);box-sizing:border-box;outline:none"></div></div><div style="display:flex;gap:8px;margin-top:16px"><button onclick="document.getElementById(\'mto-form-overlay\').style.display=\'none\'" style="flex:1;padding:12px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;cursor:pointer;color:var(--text)">Cancelar</button><button onclick="mtoGuardarNueva()" style="flex:2;padding:12px;background:var(--accent);border:none;border-radius:10px;color:white;font-weight:800;font-size:14px;cursor:pointer">✓ Añadir</button></div></div></div>';
+
+  h += '<div id="mto-ext-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;align-items:flex-end"><div style="background:var(--bg);border-radius:20px 20px 0 0;padding:20px;width:100%;box-sizing:border-box"><div style="font-weight:800;font-size:16px;margin-bottom:4px">🧯 Extintores caducados</div><div id="mto-ext-nombre" style="font-size:12px;color:var(--text3);margin-bottom:16px"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px"><div style="background:var(--bg2);border-radius:12px;padding:14px;text-align:center"><div style="font-size:26px;margin-bottom:4px">🧯</div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px">POLVO</div><div style="display:flex;align-items:center;justify-content:center;gap:10px"><button onclick="mtoExtAjustar(\'polvo\',-1)" style="width:32px;height:32px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:8px;font-size:18px;cursor:pointer;color:var(--text)">−</button><span id="mto-ext-polvo-val" style="font-size:24px;font-weight:800;min-width:28px;text-align:center;color:var(--text)">0</span><button onclick="mtoExtAjustar(\'polvo\',1)" style="width:32px;height:32px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:8px;font-size:18px;cursor:pointer;color:var(--text)">+</button></div></div><div style="background:var(--bg2);border-radius:12px;padding:14px;text-align:center"><div style="font-size:26px;margin-bottom:4px">🫧</div><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px">CO₂</div><div style="display:flex;align-items:center;justify-content:center;gap:10px"><button onclick="mtoExtAjustar(\'co2\',-1)" style="width:32px;height:32px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:8px;font-size:18px;cursor:pointer;color:var(--text)">−</button><span id="mto-ext-co2-val" style="font-size:24px;font-weight:800;min-width:28px;text-align:center;color:var(--text)">0</span><button onclick="mtoExtAjustar(\'co2\',1)" style="width:32px;height:32px;background:var(--bg3);border:1.5px solid var(--border2);border-radius:8px;font-size:18px;cursor:pointer;color:var(--text)">+</button></div></div></div><div style="display:flex;gap:8px"><button onclick="document.getElementById(\'mto-ext-overlay\').style.display=\'none\'" style="flex:1;padding:12px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;cursor:pointer;color:var(--text)">Cancelar</button><button onclick="mtoGuardarExtintores()" style="flex:2;padding:12px;background:var(--accent);border:none;border-radius:10px;color:white;font-weight:800;font-size:14px;cursor:pointer">✓ Guardar</button></div></div></div>';
+
+  h += '<div id="mto-wa-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;align-items:flex-end"><div style="background:var(--bg);border-radius:20px 20px 0 0;padding:20px;width:100%;box-sizing:border-box;max-height:92vh;overflow-y:auto"><div style="font-weight:800;font-size:16px;margin-bottom:14px">📤 Compartir / Importar MTO</div><div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:8px">EXPORTAR</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px"><button onclick="mtoEnviarWA(\'hoy\')" style="padding:11px 8px;background:#dcfce7;border:1.5px solid #86efac;border-radius:10px;font-weight:700;font-size:12px;color:#16a34a;cursor:pointer">📅 Hechos hoy</button><button onclick="mtoEnviarWA(\'todos\')" style="padding:11px 8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;font-weight:700;font-size:12px;color:#1d4ed8;cursor:pointer">📋 Todos hechos</button><button onclick="mtoEnviarWA(\'cliente\')" style="padding:11px 8px;background:#ede9fe;border:1.5px solid #a78bfa;border-radius:10px;font-weight:700;font-size:12px;color:#7c3aed;cursor:pointer">🏢 Por cliente…</button><button onclick="mtoEnviarWA(\'zona\')" style="padding:11px 8px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;font-weight:700;font-size:12px;color:#ea580c;cursor:pointer">📍 Por zona…</button></div><div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:8px">IMPORTAR (pegar mensaje recibido)</div><textarea id="mto-wa-import" placeholder="Pega aquí el mensaje MTO recibido por WhatsApp…" style="width:100%;height:100px;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text);font-family:var(--sans);box-sizing:border-box;outline:none;resize:none"></textarea><button onclick="mtoImportarWA()" style="width:100%;margin-top:8px;padding:12px;background:#25d366;border:none;border-radius:10px;color:white;font-weight:800;font-size:14px;cursor:pointer">📥 Importar y rellenar</button><button onclick="document.getElementById(\'mto-wa-overlay\').style.display=\'none\'" style="width:100%;margin-top:10px;padding:12px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;cursor:pointer;color:var(--text)">Cerrar</button></div></div>';
+
   c.innerHTML += h;
 }
+
+function mtoKeyOfi(ofi){ return (ofi.cliente+'_'+ofi.codigo).toUpperCase().replace(/[\s\-\.\/]/g,'_'); }
+function getMtoTiposOfi(ofi){
+  const c=(ofi.cliente||'').toUpperCase();
+  if(c.includes('BBVA')||c.includes('CAJAMAR')||c.includes('CAJA RURAL')||c.includes('RURALCAJA')||c.includes('CAIXA')) return ['INT','PCI1','PCI2','PCI3','PCI4'];
+  return ['INT'];
+}
+function getNombreZona(z){ return ({'1':'Valencia Ciudad','2':'Valencia Norte','3':'Valencia Oeste','4':'Valencia Sur','5':'Ribera·Safor','6':'Castellón'})[String(z)]||'Zona '+z; }
+
+function mtoAbrirFormNuevo(){
+  const ov=document.getElementById('mto-form-overlay');
+  if(ov){ ov.style.display='flex'; setTimeout(()=>document.getElementById('mto-new-cliente')&&document.getElementById('mto-new-cliente').focus(),100); }
+}
+function mtoGuardarNueva(){
+  const cliente=(document.getElementById('mto-new-cliente').value||'').trim().toUpperCase();
+  const codigo=(document.getElementById('mto-new-codigo').value||'').trim();
+  const muni=(document.getElementById('mto-new-muni').value||'').trim();
+  const zona=document.getElementById('mto-new-zona').value||'1';
+  const dir=(document.getElementById('mto-new-dir').value||'').trim();
+  const obs=(document.getElementById('mto-new-obs').value||'').trim();
+  if(!cliente||!codigo){ toast('Cliente y código son obligatorios'); return; }
+  if(clientesDB.find(o=>o.cliente===cliente&&String(o.codigo)===String(codigo))){ toast('Ya existe esta oficina'); return; }
+  clientesDB.push({zona,cliente,codigo,direccion:dir,municipio:muni,provincia:'',obs,revisiones:{},_manual:true});
+  localStorage.setItem('rt_clientes',JSON.stringify(clientesDB));
+  document.getElementById('mto-form-overlay').style.display='none';
+  toast('✓ Añadida: '+cliente+' '+codigo);
+  renderContent();
+}
+function mtoEliminarOfi(key){
+  const ofi=clientesDB.find(o=>mtoKeyOfi(o)===key);
+  if(!ofi||!confirm('¿Eliminar '+ofi.cliente+' '+ofi.codigo+' · '+ofi.municipio+'?')) return;
+  clientesDB=clientesDB.filter(o=>mtoKeyOfi(o)!==key);
+  delete mtoManual[key]; delete mtoExtintores[key];
+  localStorage.setItem('rt_clientes',JSON.stringify(clientesDB));
+  guardarStorage(); toast('🗑 Oficina eliminada'); renderContent();
+}
+
+let _mtoExtKey=null, _mtoExtTemp={polvo:0,co2:0};
+function mtoEditarExtintores(key){
+  _mtoExtKey=key;
+  _mtoExtTemp={...(mtoExtintores[key]||{polvo:0,co2:0})};
+  const ofi=clientesDB.find(o=>mtoKeyOfi(o)===key);
+  document.getElementById('mto-ext-nombre').textContent=ofi?ofi.cliente+' · '+ofi.codigo+' · '+ofi.municipio:'';
+  document.getElementById('mto-ext-polvo-val').textContent=_mtoExtTemp.polvo;
+  document.getElementById('mto-ext-co2-val').textContent=_mtoExtTemp.co2;
+  document.getElementById('mto-ext-overlay').style.display='flex';
+}
+function mtoExtAjustar(tipo,delta){
+  _mtoExtTemp[tipo]=Math.max(0,(_mtoExtTemp[tipo]||0)+delta);
+  document.getElementById('mto-ext-'+tipo+'-val').textContent=_mtoExtTemp[tipo];
+}
+function mtoGuardarExtintores(){
+  if(!_mtoExtKey) return;
+  mtoExtintores[_mtoExtKey]={..._mtoExtTemp};
+  guardarStorage();
+  document.getElementById('mto-ext-overlay').style.display='none';
+  toast(_mtoExtTemp.polvo===0&&_mtoExtTemp.co2===0?'✓ Sin extintores caducados':'🧯 Guardado: '+_mtoExtTemp.polvo+' polvo · '+_mtoExtTemp.co2+' CO₂');
+  renderContent();
+}
+
+function toggleMTOOfi(key,tipo,cliente,codigo){
+  if(!mtoManual[key]) mtoManual[key]={};
+  const actual=mtoManual[key][tipo];
+  const h=new Date(); const hoyStr=String(h.getDate()).padStart(2,'0')+'/'+String(h.getMonth()+1).padStart(2,'0');
+  if(actual){
+    const nueva=prompt('Fecha actual: '+actual+'\nEscribe nueva fecha (DD/MM) o deja vacío para borrar:',actual);
+    if(nueva===null) return;
+    if(nueva.trim()===''){delete mtoManual[key][tipo]; toast('🗑 '+cliente+' '+codigo+' · '+tipo+' borrado');}
+    else{ mtoManual[key][tipo]=nueva.trim(); toast('✏ '+cliente+' '+codigo+' · '+tipo+' → '+nueva.trim()); }
+  } else { mtoManual[key][tipo]=hoyStr; toast('✅ '+cliente+' '+codigo+' · '+tipo+' → '+hoyStr); }
+  guardarStorage(); renderContent();
+}
+
+function mtoAbrirWhatsApp(){ const ov=document.getElementById('mto-wa-overlay'); if(ov) ov.style.display='flex'; }
+
+function mtoEnviarWA(modo){
+  const h=new Date();
+  const hoyC=String(h.getDate()).padStart(2,'0')+'/'+String(h.getMonth()+1).padStart(2,'0');
+  const hoyF=hoyC+'/'+h.getFullYear();
+  let cf=null,zf=null;
+  if(modo==='cliente'){
+    const cl=[...new Set(clientesDB.map(o=>o.cliente))].sort();
+    const e=prompt('¿Qué cliente?\n'+cl.map((c,i)=>(i+1)+'. '+c).join('\n'));
+    if(!e) return;
+    const i=parseInt(e)-1; cf=isNaN(i)?e.toUpperCase():cl[i];
+  }
+  if(modo==='zona'){
+    const zz=[...new Set(clientesDB.map(o=>o.zona))].sort((a,b)=>parseInt(a)-parseInt(b));
+    const e=prompt('¿Qué zona?\n'+zz.map(z=>z+' — '+getNombreZona(z)).join('\n'));
+    if(!e) return; zf=e.trim().split(' ')[0];
+  }
+  const lineas=[];
+  clientesDB.forEach(ofi=>{
+    if(cf&&!ofi.cliente.includes(cf)) return;
+    if(zf&&ofi.zona!==zf) return;
+    const man=mtoManual[mtoKeyOfi(ofi)]||{};
+    const revs=getMtoTiposOfi(ofi).filter(t=>{ const f=man[t]||ofi.revisiones[t]||''; if(!f) return false; if(modo==='hoy') return f===hoyC||f.startsWith(hoyC); return true; }).map(t=>t+':'+(man[t]||ofi.revisiones[t]));
+    if(!revs.length) return;
+    const ext=mtoExtintores[mtoKeyOfi(ofi)]||{polvo:0,co2:0};
+    const es=ext.polvo>0||ext.co2>0?' 🧯'+ext.polvo+'·'+ext.co2:'';
+    lineas.push(ofi.cliente+' '+ofi.codigo+' '+ofi.municipio+(ofi.direccion?' '+ofi.direccion.substring(0,20):'')+' | '+revs.join(' ')+es);
+  });
+  if(!lineas.length){ toast('No hay revisiones para compartir'); return; }
+  const txt='🔧 MTO PYCSECA · '+hoyF+'\n'+'━'.repeat(24)+'\n'+lineas.join('\n')+'\n'+'━'.repeat(24)+'\n#PYCMTO';
+  const open=()=>window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+  navigator.clipboard&&navigator.clipboard.writeText(txt).then(()=>{ toast('✓ Copiado — abriendo WhatsApp'); open(); }).catch(()=>{ try{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}catch(e){} open(); });
+}
+
+function mtoImportarWA(){
+  const texto=document.getElementById('mto-wa-import').value||'';
+  if(!texto.includes('#PYCMTO')){ toast('⚠ No parece un mensaje MTO válido'); return; }
+  const lineas=texto.split('\n').filter(l=>l.includes('|'));
+  let importados=0, noEnc=[];
+  lineas.forEach(linea=>{
+    const [info,revsPart]=linea.split('|');
+    if(!revsPart) return;
+    const extM=revsPart.match(/🧯(\d+)·(\d+)/);
+    const revs={};
+    revsPart.replace(/🧯\S+/g,'').trim().split(/\s+/).forEach(tok=>{ const m=tok.match(/^(INT|PCI[1-4]):(.+)$/); if(m) revs[m[1]]=m[2]; });
+    if(!Object.keys(revs).length) return;
+    const p=info.trim().split(/\s+/);
+    const ofi=clientesDB.find(o=>o.cliente.toUpperCase().includes((p[0]||'').toUpperCase())&&String(o.codigo).replace(/\D/g,'')===String(p[1]||'').replace(/\D/g,''))||clientesDB.find(o=>o.cliente.toUpperCase().includes((p[0]||'').toUpperCase())&&String(o.codigo)===(p[1]||''));
+    if(!ofi){ noEnc.push((p[0]||'')+' '+(p[1]||'')); return; }
+    const key=mtoKeyOfi(ofi);
+    if(!mtoManual[key]) mtoManual[key]={};
+    Object.entries(revs).forEach(([t,f])=>{ mtoManual[key][t]=f; });
+    if(extM) mtoExtintores[key]={polvo:parseInt(extM[1]),co2:parseInt(extM[2])};
+    importados++;
+  });
+  guardarStorage();
+  document.getElementById('mto-wa-import').value='';
+  document.getElementById('mto-wa-overlay').style.display='none';
+  toast('✅ Importadas '+importados+' oficinas'+(noEnc.length?' · No encontradas: '+noEnc.slice(0,3).join(', '):''));
+  renderContent();
+}
+
 
 function copiarContextoCopilot(){
   const avisos = analisisResultado.filter(a => !a._separador);
@@ -4785,20 +5021,70 @@ function confirmarTrabajo(skip=false){
     tabla[pendingFinalizar].trabajo_realizado = t;
     tabla[pendingFinalizar].trabajo = t; // para exportación
   }
+  // Auto-marcar MTO si corresponde
+  autoMarcarMTO(tabla[pendingFinalizar]);
   document.getElementById('trabajoOverlay').classList.remove('open');
   pendingFinalizar=null; guardarStorage(); renderContent(); toast('✓ Finalizado');
+}
+
+// Auto-marcar MTO al finalizar un aviso
+function autoMarcarMTO(aviso){
+  if(!clientesCargado || !clientesDB.length) return;
+  const trabajo = (aviso.trabajo || aviso.trabajo_desc || aviso.trabajo_realizado || '').toLowerCase();
+
+  // Detectar tipo de revisión
+  let tipoMto = null;
+  if(/pci|incendio|extintor|detector|pulsador/.test(trabajo)){
+    // Detectar cuál PCI
+    if(/1.*pci|pci.*1|primera/.test(trabajo)) tipoMto = 'PCI1';
+    else if(/2.*pci|pci.*2|segunda/.test(trabajo)) tipoMto = 'PCI2';
+    else if(/3.*pci|pci.*3|tercera/.test(trabajo)) tipoMto = 'PCI3';
+    else if(/4.*pci|pci.*4|cuarta|anual/.test(trabajo)) tipoMto = 'PCI4';
+    else tipoMto = 'PCI1'; // por defecto primera libre
+  } else if(/int|intrus|alarm|anual.*seg|mto.*anual|revision.*anual/.test(trabajo)){
+    tipoMto = 'INT';
+  }
+
+  if(!tipoMto) return;
+
+  // Buscar la oficina en clientesDB por sistema/codigo
+  const sistema = String(aviso.sistema||'').replace(/\D/g,'');
+  const cliente = (aviso.cliente||'').toUpperCase();
+
+  let ofi = clientesDB.find(o => {
+    const cod = String(o.codigo||'').replace(/\D/g,'');
+    return cod === sistema && o.cliente.toUpperCase().includes(cliente.split(' ')[0]);
+  });
+
+  if(!ofi) return; // No encontrada
+
+  const key = mtoKeyOfi(ofi);
+  if(!mtoManual[key]) mtoManual[key] = {};
+
+  // Si es PCI, buscar el primer slot libre
+  if(tipoMto.startsWith('PCI')){
+    const slots = ['PCI1','PCI2','PCI3','PCI4'];
+    const libre = slots.find(s => !mtoManual[key][s] && !ofi.revisiones[s]);
+    if(libre) tipoMto = libre;
+  }
+
+  // Solo marcar si no está ya marcado
+  if(!mtoManual[key][tipoMto] && !ofi.revisiones[tipoMto]){
+    const hoy = new Date();
+    const hoyStr = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}`;
+    mtoManual[key][tipoMto] = hoyStr;
+    toast(`🔧 MTO auto: ${ofi.cliente} ${ofi.codigo} · ${tipoMto} → ${hoyStr}`);
+  }
 }
 
 function updateField(idx,key,val){ tabla[idx][key]=val; guardarStorage(); updateStats(); }
 
 function moverArriba(idx){
   if(idx===0) return;
-  // Buscar posición anterior que no sea separador
   let dest = idx-1;
   while(dest >= 0 && tabla[dest]._separador) dest--;
   if(dest < 0) return;
   [tabla[dest],tabla[idx]]=[tabla[idx],tabla[dest]];
-  // Si había separador entre ellos, moverlo también
   guardarStorage(); renderContent();
 }
 function moverAbajo(idx){
@@ -4808,6 +5094,99 @@ function moverAbajo(idx){
   if(dest >= tabla.length) return;
   [tabla[idx],tabla[dest]]=[tabla[dest],tabla[idx]];
   guardarStorage(); renderContent();
+}
+
+// ── DRAG & DROP TÁCTIL — handle ≡ ──────────────────────────
+let _drag = { active: false, idx: null, ghost: null, startY: 0, lastTarget: null };
+
+function dragStart(e, idx){
+  e.stopPropagation();
+  const touch = e.touches[0];
+  const card = document.getElementById('card-'+idx);
+  if(!card) return;
+
+  // Crear ghost visual
+  const ghost = document.createElement('div');
+  ghost.className = 'drag-ghost';
+  ghost.innerHTML = card.querySelector('.aviso-top')?.innerHTML || '';
+  ghost.style.top  = (touch.clientY - 30) + 'px';
+  ghost.style.left = '16px';
+  document.body.appendChild(ghost);
+
+  _drag = { active: true, idx, ghost, startY: touch.clientY, lastTarget: null };
+  card.style.opacity = '0.4';
+  navigator.vibrate && navigator.vibrate(30);
+}
+
+function dragMove(e){
+  if(!_drag.active) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+
+  // Mover ghost
+  _drag.ghost.style.top = (touch.clientY - 30) + 'px';
+
+  // Detectar sobre qué tarjeta estamos
+  _drag.ghost.style.display = 'none';
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  _drag.ghost.style.display = '';
+
+  const targetCard = el?.closest('.aviso-card');
+  const targetIdx = targetCard ? parseInt(targetCard.id.replace('card-','')) : null;
+
+  // Limpiar highlights anteriores
+  document.querySelectorAll('.drag-over-top,.drag-over-bottom').forEach(c => {
+    c.classList.remove('drag-over-top','drag-over-bottom');
+  });
+
+  if(targetIdx !== null && targetIdx !== _drag.idx && !isNaN(targetIdx)){
+    _drag.lastTarget = targetIdx;
+    // Mostrar línea arriba o abajo según posición del toque
+    const rect = targetCard.getBoundingClientRect();
+    const mitad = rect.top + rect.height / 2;
+    targetCard.classList.add(touch.clientY < mitad ? 'drag-over-top' : 'drag-over-bottom');
+  }
+}
+
+function dragEnd(e){
+  if(!_drag.active) return;
+
+  // Limpiar ghost y highlights
+  if(_drag.ghost) _drag.ghost.remove();
+  document.querySelectorAll('.drag-over-top,.drag-over-bottom').forEach(c => {
+    c.classList.remove('drag-over-top','drag-over-bottom');
+  });
+  const origCard = document.getElementById('card-'+_drag.idx);
+  if(origCard) origCard.style.opacity = '';
+
+  // Mover si hay destino válido
+  if(_drag.lastTarget !== null && _drag.lastTarget !== _drag.idx){
+    const touch = e.changedTouches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetCard = el?.closest('.aviso-card') || document.getElementById('card-'+_drag.lastTarget);
+    let destIdx = _drag.lastTarget;
+
+    // Insertar antes o después según posición
+    if(targetCard){
+      const rect = targetCard.getBoundingClientRect();
+      const mitad = rect.top + rect.height / 2;
+      if(touch.clientY >= mitad && destIdx < tabla.length - 1) destIdx++;
+    }
+
+    // Hacer el movimiento en tabla (saltando separadores)
+    const avisos = tabla.filter(f => !f._separador);
+    const srcAviso = tabla[_drag.idx];
+    const destAviso = tabla[destIdx];
+    if(srcAviso && destAviso && !srcAviso._separador && !destAviso._separador){
+      tabla.splice(_drag.idx, 1);
+      const newDest = tabla.indexOf(destAviso);
+      tabla.splice(newDest >= 0 ? newDest : destIdx, 0, srcAviso);
+      guardarStorage();
+    }
+  }
+
+  _drag = { active: false, idx: null, ghost: null, startY: 0, lastTarget: null };
+  renderContent();
 }
 
 // ============================================================
