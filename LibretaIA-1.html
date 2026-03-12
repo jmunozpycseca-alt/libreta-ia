@@ -715,7 +715,7 @@ body {
   <button class="tab" onclick="setTab('ruta')" id="tab-ruta"><span class="tab-icon">🗺️</span>RUTA</button>
   <button class="tab" onclick="setTab('direccion')" id="tab-direccion"><span class="tab-icon">🧭</span>DIRECCIÓN</button>
   <button class="tab" onclick="setTab('cierre')" id="tab-cierre"><span class="tab-icon">📊</span>EXCEL</button>
-  <button class="tab" onclick="setTab('conocimiento')" id="tab-conocimiento"><span class="tab-icon">✅</span>TAREAS</button>
+  <button class="tab" onclick="setTab('conocimiento')" id="tab-conocimiento"><span class="tab-icon">✅</span>TAREAS<span id="badge-tareas" style="display:none;background:#dc2626;color:white;font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;margin-left:4px;vertical-align:middle"></span></button>
 </div>
 
 <div class="content" id="content"></div>
@@ -758,12 +758,59 @@ body {
 
 <!-- TRABAJO MODAL -->
 <div class="trabajo-overlay" id="trabajoOverlay">
-  <div class="trabajo-box">
-    <div class="trabajo-title" id="trabajoTitle">¿Trabajo realizado?</div>
-    <input class="trabajo-input" id="trabajoInput" placeholder="Ej: Mto. trimestral PCI, extintores revisados" onkeydown="if(event.key==='Enter')previewTrabajo()">
-    <div class="trabajo-actions">
-      <button class="trabajo-skip" onclick="confirmarTrabajo(true)">Sin descripción</button>
-      <button class="trabajo-ok" onclick="previewTrabajo()">→ Revisar</button>
+  <div class="trabajo-box" style="max-width:400px;padding:0;overflow:hidden;border-radius:16px">
+    <!-- Cabecera -->
+    <div style="background:var(--accent);padding:14px 16px">
+      <div style="font-weight:800;font-size:14px;color:white" id="trabajoTitle">¿Trabajo realizado?</div>
+    </div>
+    <div style="padding:14px 16px;max-height:80vh;overflow-y:auto">
+      <!-- Estado -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <button id="btn-estado-fin" onclick="setEstadoCierre('Finalizado')"
+          style="padding:10px;background:#dcfce7;border:2px solid #16a34a;border-radius:10px;font-weight:800;font-size:13px;color:#16a34a;cursor:pointer">
+          ✓ Finalizado
+        </button>
+        <button id="btn-estado-pend" onclick="setEstadoCierre('Pendiente')"
+          style="padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;font-size:13px;color:var(--text2);cursor:pointer">
+          ⏸ Pendiente
+        </button>
+      </div>
+      <!-- Trabajo realizado -->
+      <div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:0.6px;margin-bottom:4px">TRABAJO REALIZADO</div>
+      <input class="trabajo-input" id="trabajoInput" placeholder="Ej: Mto. trimestral PCI, extintores revisados" onkeydown="if(event.key==='Enter')previewTrabajo()" style="margin-bottom:12px">
+      <!-- Equipos (opcional) -->
+      <div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:0.6px;margin-bottom:6px">EQUIPOS EN OFICINA <span style="font-weight:400;color:var(--text3)">(opcional)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Central intrusión</div>
+          <input id="eq-central" placeholder="Galaxy / Advisor..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Modelo central</div>
+          <input id="eq-central-modelo" placeholder="Flex / Dimension..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Grabador</div>
+          <input id="eq-grabador" placeholder="Scati / Onsafe..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Modelo grabador</div>
+          <input id="eq-grabador-modelo" placeholder="Modelo..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Central incendio</div>
+          <input id="eq-incendio" placeholder="Aritech / Vision..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Control acceso</div>
+          <input id="eq-acceso" placeholder="Salto / Honeywell..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+      </div>
+      <!-- Botones -->
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="trabajo-skip" onclick="cerrarCierreOverlay()">Cancelar</button>
+        <button class="trabajo-ok" onclick="previewTrabajo()">→ Guardar</button>
+      </div>
     </div>
   </div>
 </div>
@@ -819,7 +866,7 @@ body {
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button onclick="copiarContextoPortapapeles()" style="padding:7px 12px;background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.3);border-radius:8px;font-size:12px;font-weight:700;color:white;cursor:pointer">📋 Copilot</button>
+      <button onclick="copiarContextoPortapapeles()" style="padding:7px 12px;background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.3);border-radius:8px;font-size:12px;font-weight:700;color:white;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:4px"><defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#4285f4"/><stop offset="50%" style="stop-color:#9b72cb"/><stop offset="100%" style="stop-color:#d96570"/></linearGradient></defs><path d="M12 2C12 2 13.5 8.5 18 10C13.5 11.5 12 18 12 18C12 18 10.5 11.5 6 10C10.5 8.5 12 2 12 2Z" fill="url(#gi)"/></svg>Gemini</button>
       <button onclick="resetChat()" style="padding:7px 10px;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);border-radius:8px;font-size:14px;color:rgba(255,255,255,0.8);cursor:pointer">🗑</button>
       <div class="chat-drawer-close" onclick="cerrarChatDrawer()">✕</div>
     </div>
@@ -859,6 +906,7 @@ let avisoSeleccionado = null; // idx del aviso seleccionado con tap en número
 let pendingFinalizar = null;
 let analisisResultado = [];
 let diarioDB = [];
+let historialLocal = {}; // {key: [{fecha,trabajo,estado,sistema,cliente,localidad}]} — máx 5 por clave
 let infoDB = [];
 let festivos2026 = {};
 let horariosDB   = [];
@@ -880,6 +928,7 @@ let clientesDB = [];  // [{zona, cliente, codigo, direccion, municipio, provinci
 let clientesCargado = false;
 let mtoFiltro = 'todos'; // 'todos' | 'pendientes'
 let mtoZonaFiltro = 'todas';
+let mtoBloqueFiltro = 'todos'; // 'todos'|'A'|'B'|'C'
 
 // ── IA — GEMINI VIA CLOUDFLARE PROXY ─────────────────────────
 const PROXY_URL = 'https://pycseca-ia.jmunoz-pycseca.workers.dev';
@@ -1064,6 +1113,8 @@ window.onload = () => {
     `${dias[hoy.getDay()]} ${pad(hoy.getDate())}/${pad(hoy.getMonth()+1)}/${hoy.getFullYear()}`;
   cargarStorage();
   renderContent();
+  actualizarBadgeTareas();
+  setTimeout(mostrarAlertaArranque, 800);
 };
 
 function pad(n){ return String(n).padStart(2,'0'); }
@@ -1079,6 +1130,7 @@ function guardarStorage(){
     localStorage.setItem('rt_tabla', JSON.stringify(tabla));
     localStorage.setItem('rt_fecha', getFecha());
     localStorage.setItem('rt_diario', JSON.stringify(diarioDB));
+    localStorage.setItem('rt_historial_local', JSON.stringify(historialLocal));
     localStorage.setItem('rt_info', JSON.stringify(infoDB));
     localStorage.setItem('rt_tareas', JSON.stringify(tareas));
     localStorage.setItem('rt_eventos', JSON.stringify(eventosCalendario));
@@ -1099,6 +1151,8 @@ function cargarStorage(){
   try {
     const d = localStorage.getItem('rt_diario');
     if(d){ diarioDB = JSON.parse(d); diarioCargado = localStorage.getItem('rt_diario_ok')==='1'; }
+    const hl = localStorage.getItem('rt_historial_local');
+    if(hl) historialLocal = JSON.parse(hl);
     const i2 = localStorage.getItem('rt_info');
     if(i2){ infoDB = JSON.parse(i2); infoCargado = localStorage.getItem('rt_info_ok')==='1'; }
     const ta = localStorage.getItem('rt_tareas');
@@ -1211,15 +1265,16 @@ function renderAnalisis(c){
   let h = '<div class="section-pad">';
 
   // Archivos
+  const nHistorial = Object.values(historialLocal).reduce((s,v)=>s+v.length,0);
+  const nOficinas  = Object.keys(historialLocal).length;
   h += `<div class="paste-label">ARCHIVOS</div>
   <div class="archivos-row">
-    <label class="archivo-card ${diarioCargado?'cargado':''}" style="cursor:pointer;text-align:center;position:relative;overflow:hidden">
-      <input type="file" accept=".xlsx,.xls" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="cargarDiario(this)">
-      <div class="archivo-icon">${diarioCargado?'✅':'📂'}</div>
-      <div class="archivo-name">DIARIO</div>
-      <div class="archivo-status">${diarioCargado ? diarioDB.length+' registros' : 'Toca para cargar'}</div>
-      ${diarioCargado ? `<div style="font-size:10px;color:#888;margin-top:2px">${localStorage.getItem('rt_diario_fecha')||''}</div>` : ''}
-    </label>
+    <div class="archivo-card ${nHistorial>0?'cargado':''}" style="text-align:center">
+      <div class="archivo-icon">${nHistorial>0?'📱':'📋'}</div>
+      <div class="archivo-name">HISTORIAL</div>
+      <div class="archivo-status">${nHistorial>0 ? nHistorial+' visitas · '+nOficinas+' oficinas' : 'Se llena automático'}</div>
+      ${nHistorial>0 ? `<div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700">✓ Auto · App</div>` : `<div style="font-size:10px;color:#888;margin-top:2px">Al cerrar avisos</div>`}
+    </div>
     <label class="archivo-card ${infoCargado?'cargado':''}" style="cursor:pointer;text-align:center;position:relative;overflow:hidden">
       <input type="file" accept=".xlsx,.xls" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="cargarInfo(this)">
       <div class="archivo-icon">${infoCargado?'✅':'📂'}</div>
@@ -1229,9 +1284,9 @@ function renderAnalisis(c){
     </label>
   </div>`;
 
-  if(!diarioCargado || !infoCargado){
+  if(!infoCargado){
     h += `<div class="alerta alerta-warn" style="margin-bottom:10px">
-      ⚠️ ${!diarioCargado?'Diario':'Info2026'} no cargado — el análisis de recurrencias no estará disponible
+      ⚠️ Info2026 no cargado — horarios y datos de clientes no disponibles
     </div>`;
   }
 
@@ -1250,7 +1305,7 @@ function renderAnalisis(c){
     </button>
     <button onclick="copiarContextoCopilot()"
       style="flex:2;padding:12px;background:linear-gradient(135deg,#0078d4,#005a9e);border:2px solid #004c8c;border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
-      📋 Copilot
+      <svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:4px"><defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#4285f4"/><stop offset="50%" style="stop-color:#9b72cb"/><stop offset="100%" style="stop-color:#d96570"/></linearGradient></defs><path d="M12 2C12 2 13.5 8.5 18 10C13.5 11.5 12 18 12 18C12 18 10.5 11.5 6 10C10.5 8.5 12 2 12 2Z" fill="url(#gi)"/></svg>Gemini
     </button>` : ''}
   </div>`;
   if(iaResumen){
@@ -1668,10 +1723,17 @@ function cargarClientes(input){
           // Parsear fechas de revisión existentes
           const fmtFecha = v => {
             if(!v) return '';
+            // Número serial de Excel (fechas guardadas como número)
+            if(typeof v === 'number' || (typeof v === 'string' && /^\d{5}$/.test(String(v).trim()))){
+              const n = parseInt(v);
+              if(n > 1000){
+                const d = new Date(Math.round((n - 25569)*86400*1000));
+                if(!isNaN(d)) return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+'/'+d.getUTCFullYear();
+              }
+            }
             const s = String(v).trim();
             if(!s || s==='0' || s.toLowerCase()==='null') return '';
-            // Si es fecha Excel (número) ya viene como string de fecha
-            // Normalizar a DD/MM/YYYY o DD/MM
+            // Normalizar a DD/MM o DD/MM/YYYY
             const match = s.match(/(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?/);
             if(match) return match[1].padStart(2,'0')+'/'+match[2].padStart(2,'0')+(match[3]?'/'+match[3]:'');
             return s.substring(0,10);
@@ -1714,7 +1776,11 @@ function cargarClientes(input){
 function parsearAvisos(){
   const input = document.getElementById('pasteInput');
   const text = input.value.trim();
-  if(!text){ toast('Pega los avisos primero'); return; }
+  if(!text){
+    // Si ya hay avisos en tabla, no hace falta texto — solo re-renderizar
+    if(tabla.filter(f=>!f._separador).length > 0){ renderContent(); return; }
+    toast('Pega los avisos primero'); return;
+  }
   window._lastPaste = text;
 
   const btn = document.getElementById('btnAnalizar');
@@ -1779,8 +1845,13 @@ async function enriquecerConIA(){
   renderContent(); // muestra spinner en el botón
 
   try {
-    // Construir contexto compacto del Diario (últimas 60 entradas)
-    const diarioCtx = diarioDB.slice(-60).map(r => {
+    // Construir contexto compacto — historialLocal primero, Diario como fallback
+    const histCtx = Object.entries(historialLocal).slice(0,60).map(([k,visitas])=>{
+      const v = visitas[0];
+      const eq = v.equipos ? Object.entries(v.equipos).filter(([,val])=>val).map(([k2,val])=>`${k2}:${val}`).join(',') : '';
+      return `${v.fecha||''}|${v.cliente||''}|sis:${v.sistema||''}|${v.localidad||''}|${(v.trabajo||'').substring(0,80)}${eq?'|eq:'+eq:''}`;
+    }).join('\n');
+    const diarioCtx = histCtx || diarioDB.slice(-60).map(r => {
       const f = r.Fecha || '';
       const c = r.Cliente || '';
       const s = r.Sistema || '';
@@ -1882,7 +1953,9 @@ function parsearBloque(texto){
   // Ej: "(66567)C/ Teatro" → "(66567)\nC/ Teatro"
   const textoNorm = texto
     .replace(/(\)\s*)([A-ZÁÉÍÓÚÑC][\/\s])/g, '$1\n$2')
-    .replace(/(\.\w{3}\))\s*([A-ZÁÉÍÓÚÑ])/g, '$1\n$2');
+    .replace(/(\.\w{3}\))\s*([A-ZÁÉÍÓÚÑ])/g, '$1\n$2')
+    .replace(/\)(Calle|Avda?\.|Avenida|Plaza|Plza?\.|Camino|Carrer|Carretera|C\/)/gi, ')\n$1')
+    .replace(/(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)(INC\d+)/gi, '$1\n$2');
 
   const lineasDir = textoNorm.split(/\n/);
   const reProv = /VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA/i;
@@ -2091,17 +2164,34 @@ function parsearBloque(texto){
       const locR = nrm(r.Localidad||'');
       const mLoc = locA.length > 2 && locR.length > 2 && (locR.includes(locA) || locA.includes(locR));
 
-      // Match fuerte: sistema coincide
-      // Match medio: cliente + localidad coinciden
       return mSis || (mCli && mLoc);
+    }).map(h => {
+      const f = h.Fecha ? (typeof h.Fecha==='number' ? excelFecha(h.Fecha) : String(h.Fecha).substring(0,10)) : '—';
+      return {fecha: f, trabajo: (h.Trabajo||h['Trabajo / Descripcion']||'').substring(0,80), _fuente:'diario'};
     });
-    if(hits.length > 0){
-      a._historial = hits.map(h => {
-        const f = h.Fecha ? (typeof h.Fecha==='number' ? excelFecha(h.Fecha) : String(h.Fecha).substring(0,10)) : '—';
-        return {fecha: f, trabajo: (h.Trabajo||h['Trabajo / Descripcion']||'').substring(0,80)};
-      });
-      const ultima = a._historial[a._historial.length-1];
-      a.alertas.push({tipo:'historial', emoji:'📋', titulo:`HISTORIAL (${hits.length} visita${hits.length>1?'s':''})`,
+
+    // Buscar también en historialLocal
+    const sistema = String(a.sistema||a.oficina||'').trim();
+    const keysSis = sistema ? ['sis_'+sistema.replace(/\D/g,'')] : [];
+    const keyCli = 'cli_'+(a.cliente||'').toUpperCase().replace(/\s/g,'')+'_'+(a.localidad||'').toUpperCase().replace(/\s/g,'');
+    const hitsLocal = [];
+    [...keysSis, keyCli].forEach(k => {
+      if(k && historialLocal[k]) historialLocal[k].forEach(h => hitsLocal.push({...h, _fuente:'local'}));
+    });
+    // Ordenar local por fecha desc y deduplicar por fecha+trabajo
+    const todasVisitas = [...hitsLocal, ...hits].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+    const vistas = new Set();
+    const hitsUnicos = todasVisitas.filter(h => {
+      const id = h.fecha+'_'+h.trabajo.substring(0,20);
+      if(vistas.has(id)) return false;
+      vistas.add(id); return true;
+    }).slice(0,8);
+
+    if(hitsUnicos.length > 0){
+      a._historial = hitsUnicos;
+      const ultima = hitsUnicos[0]; // más reciente primero
+      const badge = hitsLocal.length>0 ? '📱' : '📋';
+      a.alertas.push({tipo:'historial', emoji:badge, titulo:`HISTORIAL (${hitsUnicos.length} visita${hitsUnicos.length>1?'s':''})`,
         msg: `Última: ${ultima.fecha} · ${ultima.trabajo}`});
     } else {
       a._historial = [];
@@ -2745,6 +2835,7 @@ function crearTareaModal(){
   const hora  = document.getElementById('taresHoraModal')?.value;
   if(!texto){ toast('Escribe la tarea primero'); return; }
   tareas.push({ id: Date.now(), texto, fecha, hora, alarmaCreada: false });
+  actualizarBadgeTareas();
   guardarStorage();
   document.getElementById('trabajoOverlay').classList.remove('open');
   updateStats();
@@ -2954,6 +3045,7 @@ function crearTarea(){
 
 function eliminarTarea(idx){
   tareas.splice(idx, 1);
+  actualizarBadgeTareas();
   guardarStorage();
   renderContent();
 }
@@ -2982,6 +3074,7 @@ function crearEventoAviso(idx){
 
 function eliminarEvento(idx){
   eventosCalendario.splice(idx, 1);
+  actualizarBadgeTareas();
   guardarStorage();
   renderContent();
 }
@@ -3648,12 +3741,12 @@ function abrirClaudeConContexto(){
       <div style="font-size:16px;font-weight:800;color:#1a1a1a;margin-bottom:6px">${copiado ? '✓ Copiado' : 'Listo'} — ${nReg} registros</div>
       <div style="font-size:14px;color:#555;line-height:1.6;margin-bottom:20px">
         ${copiado
-          ? 'Texto copiado al portapapeles.<br>En Copilot <strong>mantén pulsado → Pegar</strong> y envía.'
-          : 'Pulsa "Abrir Copilot", luego mantén pulsado en el chat y selecciona <strong>Pegar</strong>.'}
+          ? 'Texto copiado al portapapeles.<br>En Gemini <strong>mantén pulsado → Pegar</strong> y envía.'
+          : 'Pulsa "Abrir Gemini", luego mantén pulsado en el chat y selecciona <strong>Pegar</strong>.'}
       </div>
       <button id="btnAbrirCopilot"
         style="width:100%;padding:15px;background:#0078d4;border:none;border-radius:10px;color:white;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:8px">
-        Abrir Copilot →
+        Abrir Gemini →
       </button>
       <button onclick="this.parentElement.parentElement.remove()"
         style="width:100%;padding:11px;background:transparent;border:none;color:#888;font-size:14px;cursor:pointer">
@@ -3664,7 +3757,7 @@ function abrirClaudeConContexto(){
 
   document.getElementById('btnAbrirCopilot').addEventListener('click', function(){
     overlay.remove();
-    window.open('https://copilot.microsoft.com', '_blank');
+    window.open('https://gemini.google.com', '_blank');
   });
 }
 
@@ -4352,9 +4445,32 @@ function calcularMTO(){
   return resultado;
 }
 
+function getMtoColorCorp(cliente){
+  const c = (cliente||'').toUpperCase();
+  if(c.includes('BBVA'))    return { bg:'#dbeafe', border:'#004A8F', txt:'#004A8F', dark:'#003570', label:'BBVA' };
+  if(c.includes('CAJAMAR')||c.includes('CAJA RURAL')||c.includes('CAIXA RURAL'))
+                             return { bg:'#dcfce7', border:'#009A44', txt:'#006830', dark:'#005a26', label:'CAJAMAR' };
+  if(c.includes('DIA')||c==='DIA') return { bg:'#fee2e2', border:'#E30613', txt:'#b91c1c', dark:'#991b1b', label:'DIA' };
+  if(c.includes('REPSOL'))   return { bg:'#fef9c3', border:'#cc2200', txt:'#cc2200', dark:'#991a00', label:'REPSOL' };
+  if(c.includes('PLENOIL')||c.includes('PLENERGY')) return { bg:'#ffedd5', border:'#FF6600', txt:'#c2410c', dark:'#9a3412', label:'PLENOIL' };
+  if(c.includes('SP')||c.includes('SPRINTER'))      return { bg:'#ede9fe', border:'#6D1FBF', txt:'#5b21b6', dark:'#4c1d95', label:'SPRINTER' };
+  if(c.includes('JD'))       return { bg:'#f0fdf4', border:'#15803d', txt:'#15803d', dark:'#166534', label:'JD' };
+  return { bg:'#f1f5f9', border:'#64748b', txt:'#475569', dark:'#334155', label:cliente };
+}
+
+function getMtoBloque(ofi){
+  // Detectar por nombre de hoja (_sheet) o por cliente
+  const sheet = (ofi._sheet||'').toUpperCase();
+  const cli   = (ofi.cliente||'').toUpperCase();
+  if(sheet.endsWith('B') || cli.includes('BBVA'))    return 'B';
+  if(sheet.endsWith('C') || cli.includes('CAJAMAR')||cli.includes('CAJA RURAL')||cli.includes('CAIXA')) return 'C';
+  return 'A'; // DIA, REPSOL, PLENOIL, SP, JD, etc.
+}
+
+
 function renderMTO(c){
   if(!clientesCargado || clientesDB.length === 0){
-    c.innerHTML += `<div class="section-pad">
+    c.innerHTML = `<div class="section-pad">
       <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:20px;margin-bottom:16px;text-align:center">
         <div style="font-size:32px;margin-bottom:8px">📋</div>
         <div style="font-weight:800;font-size:15px;color:var(--text);margin-bottom:6px">Carga el archivo Clientes.xlsx</div>
@@ -4371,9 +4487,13 @@ function renderMTO(c){
   const hoy = new Date();
   const hoyCorto = String(hoy.getDate()).padStart(2,'0')+'/'+String(hoy.getMonth()+1).padStart(2,'0');
 
+  const busq = (window._mtoBusq||'').toLowerCase();
+  const zonasDisp = [...new Set(clientesDB.map(o=>o.zona))].sort((a,b)=>parseInt(a)-parseInt(b));
+
   let totalHecho=0, totalPend=0, totalOfi=0;
   clientesDB.forEach(ofi => {
     if(mtoZonaFiltro !== 'todas' && mtoZonaFiltro !== ofi.zona) return;
+    if(mtoBloqueFiltro !== 'todos' && getMtoBloque(ofi) !== mtoBloqueFiltro) return;
     if(busq){ const hay=(ofi.cliente+' '+ofi.codigo+' '+ofi.municipio+' '+(ofi.direccion||'')).toLowerCase(); if(!hay.includes(busq)) return; }
     const man = mtoManual[mtoKeyOfi(ofi)]||{};
     getMtoTiposOfi(ofi).forEach(t => {
@@ -4381,9 +4501,6 @@ function renderMTO(c){
       if(man[t]||ofi.revisiones[t]) totalHecho++; else totalPend++;
     });
   });
-
-  const zonasDisp = [...new Set(clientesDB.map(o=>o.zona))].sort((a,b)=>parseInt(a)-parseInt(b));
-  const busq = (window._mtoBusq||'').toLowerCase();
 
   let h = '<div class="section-pad" style="padding-bottom:80px">';
 
@@ -4407,11 +4524,18 @@ function renderMTO(c){
   if(busq) h += '<button onclick="window._mtoBusq=\'\';renderContent()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>';
   h += '</div>';
 
-  // Filtros
-  h += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+  // Filtros fila 1: estado + zona
+  h += '<div style="display:flex;gap:6px;margin-bottom:7px;flex-wrap:wrap">';
   h += '<button onclick="mtoFiltro=\'todos\';renderContent()" style="padding:5px 12px;background:'+(mtoFiltro==='todos'?'var(--accent)':'var(--bg2)')+';color:'+(mtoFiltro==='todos'?'white':'var(--text2)')+';border:1.5px solid '+(mtoFiltro==='todos'?'var(--accent-dark)':'var(--border2)')+';border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">Todos</button>';
   h += '<button onclick="mtoFiltro=\'pendientes\';renderContent()" style="padding:5px 12px;background:'+(mtoFiltro==='pendientes'?'#ea580c':'var(--bg2)')+';color:'+(mtoFiltro==='pendientes'?'white':'var(--text2)')+';border:1.5px solid '+(mtoFiltro==='pendientes'?'#ea580c':'var(--border2)')+';border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">⚠ Pendientes</button>';
   h += '<select onchange="mtoZonaFiltro=this.value;renderContent()" style="padding:5px 10px;background:'+(mtoZonaFiltro!=='todas'?'var(--accent)':'var(--bg2)')+';color:'+(mtoZonaFiltro!=='todas'?'white':'var(--text2)')+';border:1.5px solid var(--border2);border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;outline:none"><option value="todas">Zona: Todas</option>'+zonasDisp.map(z=>'<option value="'+z+'" '+(mtoZonaFiltro===z?'selected':'')+'>'+z+' — '+getNombreZona(z)+'</option>').join('')+'</select>';
+  h += '</div>';
+  // Filtros fila 2: bloque de cliente con colores corporativos
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:12px">';
+  h += '<button onclick="mtoBloqueFiltro=\'todos\';renderContent()" style="padding:7px 4px;background:'+(mtoBloqueFiltro==='todos'?'#334155':'var(--bg2)')+';color:'+(mtoBloqueFiltro==='todos'?'white':'#64748b')+';border:1.5px solid #64748b;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer">Todos</button>';
+  h += '<button onclick="mtoBloqueFiltro=\'B\';renderContent()" style="padding:7px 4px;background:'+(mtoBloqueFiltro==='B'?'#004A8F':'#dbeafe')+';color:'+(mtoBloqueFiltro==='B'?'white':'#004A8F')+';border:2px solid #004A8F;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer">🔵 BBVA</button>';
+  h += '<button onclick="mtoBloqueFiltro=\'C\';renderContent()" style="padding:7px 4px;background:'+(mtoBloqueFiltro==='C'?'#009A44':'#dcfce7')+';color:'+(mtoBloqueFiltro==='C'?'white':'#006830')+';border:2px solid #009A44;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer">🟢 CAJAMAR</button>';
+  h += '<button onclick="mtoBloqueFiltro=\'A\';renderContent()" style="padding:7px 4px;background:'+(mtoBloqueFiltro==='A'?'#92400e':'#fff7ed')+';color:'+(mtoBloqueFiltro==='A'?'white':'#92400e')+';border:2px solid #d97706;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer">🟠 Otros</button>';
   h += '</div>';
 
   // Agrupar por zona
@@ -4424,20 +4548,47 @@ function renderMTO(c){
     if(mtoZonaFiltro !== 'todas' && mtoZonaFiltro !== zona) return;
     let oficinas = porZona[zona].filter(ofi => {
       if(busq){ const hay=(ofi.cliente+' '+ofi.codigo+' '+ofi.municipio+' '+(ofi.direccion||'')).toLowerCase(); if(!hay.includes(busq)) return false; }
-      if(mtoFiltro==='pendientes'){ const man=mtoManual[mtoKeyOfi(ofi)]||{}; return getMtoTiposOfi(ofi).some(t=>!(man[t]||ofi.revisiones[t])); }
+      if(mtoFiltro==='pendientes'){ const man=mtoManual[mtoKeyOfi(ofi)]||{}; if(!getMtoTiposOfi(ofi).some(t=>!(man[t]||ofi.revisiones[t]))) return false; }
+      if(mtoBloqueFiltro!=='todos' && getMtoBloque(ofi)!==mtoBloqueFiltro) return false;
       return true;
     });
     if(!oficinas.length) return;
     algunaVisible = true;
 
-    h += '<div style="margin-bottom:16px">';
-    h += '<div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><div style="flex:1;height:1px;background:var(--border2)"></div>Zona '+zona+' — '+getNombreZona(zona)+'<div style="flex:1;height:1px;background:var(--border2)"></div></div>';
+    h += '<div style="margin-bottom:20px">';
+    h += '<div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:10px;display:flex;align-items:center;gap:6px"><div style="flex:1;height:1px;background:var(--border2)"></div>📍 ZONA '+zona+' — '+getNombreZona(zona)+'<div style="flex:1;height:1px;background:var(--border2)"></div></div>';
 
+    // Sub-agrupar por bloque A/B/C
+    const BLOQUES_INFO = {
+      'B': { label:'BBVA',    bg:'#004A8F', txt:'white', icon:'🔵' },
+      'C': { label:'CAJAMAR', bg:'#009A44', txt:'white', icon:'🟢' },
+      'A': { label:'Otros',   bg:'#b45309', txt:'white', icon:'🟠' },
+    };
+    const bloqueOrden = ['B','C','A'];
+    const porBloque = {};
     oficinas.forEach(ofi => {
+      const b = getMtoBloque(ofi);
+      if(!porBloque[b]) porBloque[b] = [];
+      porBloque[b].push(ofi);
+    });
+    const hayVariosB = Object.keys(porBloque).length > 1;
+
+    bloqueOrden.forEach(bloque => {
+      const grupoOfi = porBloque[bloque];
+      if(!grupoOfi || !grupoOfi.length) return;
+      const bi = BLOQUES_INFO[bloque];
+      if(hayVariosB || mtoBloqueFiltro === 'todos'){
+        h += '<div style="display:flex;align-items:center;gap:6px;margin:8px 0 5px">';
+        h += '<div style="background:'+bi.bg+';color:'+bi.txt+';font-size:10px;font-weight:800;border-radius:6px;padding:2px 10px;letter-spacing:0.4px">'+bi.icon+' '+bi.label+'</div>';
+        h += '<div style="flex:1;height:1px;background:'+bi.bg+'50"></div>';
+        h += '</div>';
+      }
+
+    grupoOfi.forEach(ofi => {
       const key = mtoKeyOfi(ofi);
       const man = mtoManual[key]||{};
       const tipos = getMtoTiposOfi(ofi);
-      const cc = getColorCliente(ofi.cliente);
+      const cc = getMtoColorCorp(ofi.cliente);
       const hechos = tipos.filter(t=>man[t]||ofi.revisiones[t]).length;
       const pct = tipos.length ? Math.round(hechos/tipos.length*100) : 0;
       const todoHecho = hechos===tipos.length;
@@ -4481,7 +4632,8 @@ function renderMTO(c){
 
       if(ofi.obs) h += '<div style="padding:4px 12px 8px;font-size:11px;color:var(--text3);font-style:italic">'+ofi.obs+'</div>';
       h += '</div>';
-    });
+    }); // fin grupoOfi.forEach
+    }); // fin bloqueOrden.forEach
     h += '</div>';
   });
 
@@ -4498,7 +4650,7 @@ function renderMTO(c){
 
   h += '<div id="mto-wa-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;align-items:flex-end"><div style="background:var(--bg);border-radius:20px 20px 0 0;padding:20px;width:100%;box-sizing:border-box;max-height:92vh;overflow-y:auto"><div style="font-weight:800;font-size:16px;margin-bottom:14px">📤 Compartir / Importar MTO</div><div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:8px">EXPORTAR</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px"><button onclick="mtoEnviarWA(\'hoy\')" style="padding:11px 8px;background:#dcfce7;border:1.5px solid #86efac;border-radius:10px;font-weight:700;font-size:12px;color:#16a34a;cursor:pointer">📅 Hechos hoy</button><button onclick="mtoEnviarWA(\'todos\')" style="padding:11px 8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;font-weight:700;font-size:12px;color:#1d4ed8;cursor:pointer">📋 Todos hechos</button><button onclick="mtoEnviarWA(\'cliente\')" style="padding:11px 8px;background:#ede9fe;border:1.5px solid #a78bfa;border-radius:10px;font-weight:700;font-size:12px;color:#7c3aed;cursor:pointer">🏢 Por cliente…</button><button onclick="mtoEnviarWA(\'zona\')" style="padding:11px 8px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;font-weight:700;font-size:12px;color:#ea580c;cursor:pointer">📍 Por zona…</button></div><div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.8px;margin-bottom:8px">IMPORTAR (pegar mensaje recibido)</div><textarea id="mto-wa-import" placeholder="Pega aquí el mensaje MTO recibido por WhatsApp…" style="width:100%;height:100px;padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text);font-family:var(--sans);box-sizing:border-box;outline:none;resize:none"></textarea><button onclick="mtoImportarWA()" style="width:100%;margin-top:8px;padding:12px;background:#25d366;border:none;border-radius:10px;color:white;font-weight:800;font-size:14px;cursor:pointer">📥 Importar y rellenar</button><button onclick="document.getElementById(\'mto-wa-overlay\').style.display=\'none\'" style="width:100%;margin-top:10px;padding:12px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;cursor:pointer;color:var(--text)">Cerrar</button></div></div>';
 
-  c.innerHTML += h;
+  c.innerHTML = h;
 }
 
 function mtoKeyOfi(ofi){ return (ofi.cliente+'_'+ofi.codigo).toUpperCase().replace(/[\s\-\.\/]/g,'_'); }
@@ -4645,14 +4797,14 @@ function copiarContextoCopilot(){
   ).join('\n\n');
   const texto = `Soy técnico de seguridad Pycseca. Estos son mis avisos de hoy ${getFecha()}:\n\n${lineas}\n\n`;
   navigator.clipboard.writeText(texto)
-    .then(()=>{ toast('✓ Copiado — abre Copilot y pega'); window.open('https://copilot.microsoft.com','_blank'); })
+    .then(()=>{ toast('✓ Copiado para Gemini'); window.open('https://gemini.google.com','_blank'); })
     .catch(()=>{ 
       // Fallback
       const ta = document.createElement('textarea');
       ta.value = texto; document.body.appendChild(ta); ta.select();
       document.execCommand('copy'); document.body.removeChild(ta);
-      toast('✓ Copiado — abre Copilot y pega');
-      window.open('https://copilot.microsoft.com','_blank');
+      toast('✓ Copiado para Gemini');
+      window.open('https://gemini.google.com','_blank');
     });
 }
 
@@ -4987,12 +5139,21 @@ function toggleCard(idx){ if(avisosAbiertos.has(idx)) avisosAbiertos.delete(idx)
 function cambiarEstado(idx,estado){
   if(estado==='Finalizado'){
     pendingFinalizar=idx;
+    _estadoCierre = 'Finalizado';
     document.getElementById('trabajoTitle').textContent=`¿Trabajo en ${tabla[idx].cliente} ${tabla[idx].oficina||''}?`;
     document.getElementById('trabajoInput').value=tabla[idx].trabajo||'';
+    // Limpiar campos equipo
+    ['eq-central','eq-central-modelo','eq-grabador','eq-grabador-modelo','eq-incendio','eq-acceso'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value='';
+    });
+    // Resetear botones estado
+    setEstadoCierre('Finalizado');
     document.getElementById('trabajoOverlay').classList.add('open');
-    setTimeout(()=>document.getElementById('trabajoInput').focus(),100);
+    setTimeout(()=>{ document.getElementById('trabajoInput').focus(); rellenarEquiposCierre(tabla[idx]); },150);
   } else {
-    tabla[idx].estado=estado; guardarStorage(); renderContent(); toast(`→ ${estado}`);
+    tabla[idx].estado=estado;
+    if(estado==='Finalizado'||estado==='Finalizado con incidencia') guardarEnHistorialLocal(tabla[idx]);
+    guardarStorage(); renderContent(); toast(`→ ${estado}`);
   }
 }
 
@@ -5014,20 +5175,151 @@ function seleccionarAviso(idx){
   renderContent();
 }
 
-function confirmarTrabajo(skip=false){
-  const t=document.getElementById('trabajoInput').value.trim();
-  tabla[pendingFinalizar].estado='Finalizado';
-  if(!skip && t){
-    tabla[pendingFinalizar].trabajo_realizado = t;
-    tabla[pendingFinalizar].trabajo = t; // para exportación
+// Estado del cierre
+let _estadoCierre = 'Finalizado';
+
+function setEstadoCierre(estado){
+  _estadoCierre = estado;
+  const btnFin = document.getElementById('btn-estado-fin');
+  const btnPend = document.getElementById('btn-estado-pend');
+  if(!btnFin || !btnPend) return;
+  if(estado === 'Finalizado'){
+    btnFin.style.background='#dcfce7'; btnFin.style.border='2px solid #16a34a'; btnFin.style.color='#16a34a';
+    btnPend.style.background='var(--bg2)'; btnPend.style.border='1.5px solid var(--border2)'; btnPend.style.color='var(--text2)';
+  } else {
+    btnPend.style.background='#fff7ed'; btnPend.style.border='2px solid #ea580c'; btnPend.style.color='#ea580c';
+    btnFin.style.background='var(--bg2)'; btnFin.style.border='1.5px solid var(--border2)'; btnFin.style.color='var(--text2)';
   }
-  // Auto-marcar MTO si corresponde
-  autoMarcarMTO(tabla[pendingFinalizar]);
-  document.getElementById('trabajoOverlay').classList.remove('open');
-  pendingFinalizar=null; guardarStorage(); renderContent(); toast('✓ Finalizado');
 }
 
-// Auto-marcar MTO al finalizar un aviso
+function cerrarCierreOverlay(){
+  document.getElementById('trabajoOverlay').classList.remove('open');
+  pendingFinalizar = null;
+  _estadoCierre = 'Finalizado';
+}
+
+function leerEquiposCierre(){
+  return {
+    central:     (document.getElementById('eq-central')?.value||'').trim(),
+    centralMod:  (document.getElementById('eq-central-modelo')?.value||'').trim(),
+    grabador:    (document.getElementById('eq-grabador')?.value||'').trim(),
+    grabadorMod: (document.getElementById('eq-grabador-modelo')?.value||'').trim(),
+    incendio:    (document.getElementById('eq-incendio')?.value||'').trim(),
+    acceso:      (document.getElementById('eq-acceso')?.value||'').trim(),
+  };
+}
+
+function rellenarEquiposCierre(aviso){
+  // Pre-rellenar con datos ya conocidos del historial
+  const sistema = String(aviso.sistema||'').trim();
+  const key = sistema ? 'sis_'+sistema.replace(/\D/g,'') : 'cli_'+(aviso.cliente||'').toUpperCase().replace(/\s/g,'')+'_'+(aviso.localidad||'').toUpperCase().replace(/\s/g,'');
+  const hist = historialLocal[key];
+  if(!hist || !hist.length) return;
+  const ultimo = hist[0]; // más reciente
+  if(ultimo.equipos){
+    if(ultimo.equipos.central)     { const el=document.getElementById('eq-central');     if(el) el.value=ultimo.equipos.central; }
+    if(ultimo.equipos.centralMod)  { const el=document.getElementById('eq-central-modelo'); if(el) el.value=ultimo.equipos.centralMod; }
+    if(ultimo.equipos.grabador)    { const el=document.getElementById('eq-grabador');    if(el) el.value=ultimo.equipos.grabador; }
+    if(ultimo.equipos.grabadorMod) { const el=document.getElementById('eq-grabador-modelo'); if(el) el.value=ultimo.equipos.grabadorMod; }
+    if(ultimo.equipos.incendio)    { const el=document.getElementById('eq-incendio');    if(el) el.value=ultimo.equipos.incendio; }
+    if(ultimo.equipos.acceso)      { const el=document.getElementById('eq-acceso');      if(el) el.value=ultimo.equipos.acceso; }
+  }
+}
+
+function confirmarTrabajo(skip=false){
+  const t=document.getElementById('trabajoInput').value.trim();
+  const equipos = leerEquiposCierre();
+  tabla[pendingFinalizar].estado = _estadoCierre;
+  if(!skip && t){
+    tabla[pendingFinalizar].trabajo_realizado = t;
+    tabla[pendingFinalizar].trabajo = t;
+  }
+  // Guardar equipos en el aviso
+  const hayEquipos = Object.values(equipos).some(v=>v);
+  if(hayEquipos) tabla[pendingFinalizar].equipos = equipos;
+  // Guardar en historial local
+  guardarEnHistorialLocal(tabla[pendingFinalizar]);
+  // Auto-marcar MTO si corresponde
+  if(_estadoCierre === 'Finalizado') autoMarcarMTO(tabla[pendingFinalizar]);
+  document.getElementById('trabajoOverlay').classList.remove('open');
+  _estadoCierre = 'Finalizado';
+  pendingFinalizar=null; guardarStorage(); renderContent(); toast('✓ '+(_estadoCierre==='Finalizado'?'Finalizado':'Guardado'));
+}
+
+// Guardar visita en historial local (máx 20 por oficina — CCTV, sobrescribe el más antiguo)
+const HIST_MAX = 20;
+function guardarEnHistorialLocal(aviso){
+  if(!aviso || aviso._separador) return;
+  // Clave por sistema (código) o por cliente+localidad
+  const sistema = String(aviso.sistema||'').trim();
+  const key = sistema
+    ? 'sis_'+sistema.replace(/\D/g,'')
+    : 'cli_'+(aviso.cliente||'').toUpperCase().replace(/\s/g,'')+'_'+(aviso.localidad||'').toUpperCase().replace(/\s/g,'');
+  if(!key || key==='sis_'||key==='cli___') return;
+
+  if(!historialLocal[key]) historialLocal[key]=[];
+  const entrada = {
+    fecha: getFecha(),
+    trabajo: (aviso.trabajo_realizado||aviso.trabajo||aviso.trabajo_desc||''),
+    estado: aviso.estado||'Finalizado',
+    sistema: sistema,
+    cliente: aviso.cliente||'',
+    oficina: aviso.oficina||'',
+    localidad: aviso.localidad||''
+  };
+  // Guardar equipos si los hay (última escritura gana)
+  if(aviso.equipos && Object.values(aviso.equipos).some(v=>v)){
+    entrada.equipos = aviso.equipos;
+    // Actualizar también entradas anteriores de la misma oficina
+    if(historialLocal[key]) historialLocal[key].forEach(h => { if(!h.equipos) h.equipos = aviso.equipos; });
+  } else if(historialLocal[key] && historialLocal[key][0] && historialLocal[key][0].equipos){
+    // Heredar equipos de la visita anterior si no se han rellenado
+    entrada.equipos = historialLocal[key][0].equipos;
+  }
+  historialLocal[key].unshift(entrada); // más reciente primero
+  if(historialLocal[key].length > HIST_MAX) historialLocal[key] = historialLocal[key].slice(0, HIST_MAX); // CCTV: sobrescribe el más antiguo
+}
+
+// Sembrar historial local desde Diario.xlsx (operación única)
+function sembrarHistorialDesdeDiario(){
+  if(!diarioCargado || !diarioDB.length){ toast('Carga el Diario primero'); return; }
+  let sembradas = 0;
+  diarioDB.forEach(r => {
+    const sistema = String(r.Sistema||'').trim();
+    const cliente = String(r.Cliente||r.Entidad||'').trim();
+    const localidad = String(r.Localidad||'').trim();
+    const fecha = r.Fecha ? (typeof r.Fecha==='number' ? excelFecha(r.Fecha) : String(r.Fecha).substring(0,10)) : '';
+    const trabajo = String(r.Trabajo||r['Trabajo / Descripcion']||'').substring(0,100);
+    if(!fecha || !cliente) return;
+
+    const key = sistema
+      ? 'sis_'+sistema.replace(/\D/g,'')
+      : 'cli_'+cliente.toUpperCase().replace(/\s/g,'')+'_'+localidad.toUpperCase().replace(/\s/g,'');
+    if(!key || key==='sis_') return;
+
+    if(!historialLocal[key]) historialLocal[key]=[];
+    // No duplicar por fecha
+    if(historialLocal[key].some(h=>h.fecha===fecha&&h.trabajo.substring(0,20)===trabajo.substring(0,20))) return;
+    historialLocal[key].push({fecha, trabajo, estado:'Finalizado', sistema, cliente, oficina:'', localidad});
+    sembradas++;
+  });
+
+  // Ordenar cada lista por fecha desc y limitar a 5
+  Object.keys(historialLocal).forEach(k => {
+    historialLocal[k] = historialLocal[k]
+      .sort((a,b)=>b.fecha.localeCompare(a.fecha))
+      .slice(0,5);
+  });
+
+  guardarStorage();
+  // Ya no necesitamos el diarioDB en memoria — liberar
+  diarioDB = [];
+  diarioCargado = false;
+  localStorage.removeItem('rt_diario');
+  localStorage.removeItem('rt_diario_ok');
+  toast(`✅ Historial importado: ${sembradas} visitas · ahora el Diario ya no es necesario`);
+  renderContent();
+}
 function autoMarcarMTO(aviso){
   if(!clientesCargado || !clientesDB.length) return;
   const trabajo = (aviso.trabajo || aviso.trabajo_desc || aviso.trabajo_realizado || '').toLowerCase();
@@ -5820,7 +6112,7 @@ function copiarContextoPortapapeles(){
   const ctx = construirContextoChat('Contexto completo de PycLibreta para el técnico de seguridad Pycseca Valencia:');
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(ctx)
-      .then(()=> toast('📋 Contexto copiado — pégalo en Copilot'))
+      .then(()=> toast('📋 Contexto copiado — pégalo en Gemini'))
       .catch(()=> copiarFallback(ctx));
   } else {
     copiarFallback(ctx);
@@ -5835,7 +6127,7 @@ function copiarFallback(texto){
   ta.focus(); ta.select();
   try {
     document.execCommand('copy');
-    toast('📋 Contexto copiado — pégalo en Copilot');
+    toast('📋 Contexto copiado — pégalo en Gemini');
   } catch(e) {
     toast('No se pudo copiar — usa HTTPS (GitHub Pages)');
   }
@@ -5995,6 +6287,55 @@ function programarNotificacionesPendientes(){
       toast(`🔔 Notificación programada para ${t.hora}`);
     }
   });
+}
+
+// ============================================================
+// BADGE TAREAS + ALERTA ARRANQUE
+// ============================================================
+function actualizarBadgeTareas(){
+  const badge = document.getElementById('badge-tareas');
+  if(!badge) return;
+  const hoy = new Date();
+  const hoyISO = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  const pendHoy = [
+    ...tareas.filter(t => t.fecha && t.fecha <= hoyISO),
+    ...eventosCalendario.filter(e => e.fecha && e.fecha === hoyISO)
+  ].length;
+  if(pendHoy > 0){
+    badge.textContent = pendHoy;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function mostrarAlertaArranque(){
+  const hoy = new Date();
+  const hoyISO = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  const mananaISO = (() => { const d=new Date(hoy); d.setDate(d.getDate()+1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+
+  const tareasHoy = tareas.filter(t => t.fecha && t.fecha <= hoyISO);
+  const eventosHoy = eventosCalendario.filter(e => e.fecha === hoyISO);
+  const tareasMañana = tareas.filter(t => t.fecha === mananaISO);
+
+  if(tareasHoy.length === 0 && eventosHoy.length === 0) return;
+
+  let lineas = [];
+  tareasHoy.forEach(t => lineas.push('📋 '+(t.texto||'Tarea')+(t.hora?' · '+t.hora:'')));
+  eventosHoy.forEach(e => lineas.push('📅 '+(e.titulo||e.texto||'Evento')+(e.hora?' · '+e.hora:'')));
+  if(tareasMañana.length > 0) lineas.push('⏰ Mañana: '+tareasMañana.length+' tarea'+(tareasMañana.length>1?'s':''));
+
+  // Mostrar banner en cabecera
+  const header = document.querySelector('.header-inner') || document.querySelector('.header');
+  if(!header) return;
+  const banner = document.createElement('div');
+  banner.id = 'alerta-arranque';
+  banner.style.cssText = 'background:#1e3a5f;color:white;padding:8px 14px;font-size:12px;font-weight:600;line-height:1.6;cursor:pointer;border-top:1px solid rgba(255,255,255,0.15)';
+  banner.innerHTML = '🔔 <strong>Hoy:</strong> '+lineas.join(' &nbsp;·&nbsp; ')+'  <span style="opacity:0.6;float:right">✕</span>';
+  banner.onclick = () => { banner.remove(); setTab('conocimiento'); };
+  header.parentNode.insertBefore(banner, header.nextSibling);
+  // Auto-ocultar tras 8 segundos
+  setTimeout(() => { if(banner.parentNode) banner.remove(); }, 8000);
 }
 
 // Init
