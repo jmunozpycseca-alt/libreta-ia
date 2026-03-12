@@ -1298,15 +1298,14 @@ function renderAnalisis(c){
       style="flex:2;padding:12px;background:var(--accent);border:2px solid var(--accent-dark);border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
       🔍 Analizar
     </button>
-    ${analisisResultado.length > 0 ? `
     <button onclick="enriquecerConIA()" ${iaEnriqueciendo?'disabled':''}
       style="flex:2;padding:12px;background:${iaEnriqueciendo?'#374151':'linear-gradient(135deg,#1a7a4a,#22c55e)'};border:2px solid ${iaEnriqueciendo?'#374151':'#166534'};border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;opacity:${iaEnriqueciendo?'0.7':'1'}">
       ${iaEnriqueciendo ? `<div class="ia-spinner"></div><span>Analizando...</span>` : `<span>✨ IA</span>`}
     </button>
     <button onclick="copiarContextoCopilot()"
-      style="flex:2;padding:12px;background:linear-gradient(135deg,#0078d4,#005a9e);border:2px solid #004c8c;border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
-      <svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:4px"><defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#4285f4"/><stop offset="50%" style="stop-color:#9b72cb"/><stop offset="100%" style="stop-color:#d96570"/></linearGradient></defs><path d="M12 2C12 2 13.5 8.5 18 10C13.5 11.5 12 18 12 18C12 18 10.5 11.5 6 10C10.5 8.5 12 2 12 2Z" fill="url(#gi)"/></svg>Gemini
-    </button>` : ''}
+      style="flex:2;padding:12px;background:linear-gradient(135deg,#1a73e8,#1557b0);border:2px solid #1557b0;border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+      <svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#4285f4"/><stop offset="50%" style="stop-color:#9b72cb"/><stop offset="100%" style="stop-color:#d96570"/></linearGradient></defs><path d="M12 2C12 2 13.5 8.5 18 10C13.5 11.5 12 18 12 18C12 18 10.5 11.5 6 10C10.5 8.5 12 2 12 2Z" fill="url(#gi)"/></svg>Gemini
+    </button>
   </div>`;
   if(iaResumen){
     h += `<div class="ia-resumen-bar" style="margin-top:8px">
@@ -1776,7 +1775,11 @@ function cargarClientes(input){
 function parsearAvisos(){
   const input = document.getElementById('pasteInput');
   const text = input.value.trim();
-  if(!text){ toast('Pega los avisos primero'); return; }
+  if(!text){
+    // Si ya hay avisos en tabla, no hace falta texto — solo re-renderizar
+    if(tabla.filter(f=>!f._separador).length > 0){ renderContent(); return; }
+    toast('Pega los avisos primero'); return;
+  }
   window._lastPaste = text;
 
   const btn = document.getElementById('btnAnalizar');
@@ -1841,8 +1844,13 @@ async function enriquecerConIA(){
   renderContent(); // muestra spinner en el botón
 
   try {
-    // Construir contexto compacto del Diario (últimas 60 entradas)
-    const diarioCtx = diarioDB.slice(-60).map(r => {
+    // Construir contexto compacto — historialLocal primero, Diario como fallback
+    const histCtx = Object.entries(historialLocal).slice(0,60).map(([k,visitas])=>{
+      const v = visitas[0];
+      const eq = v.equipos ? Object.entries(v.equipos).filter(([,val])=>val).map(([k2,val])=>`${k2}:${val}`).join(',') : '';
+      return `${v.fecha||''}|${v.cliente||''}|sis:${v.sistema||''}|${v.localidad||''}|${(v.trabajo||'').substring(0,80)}${eq?'|eq:'+eq:''}`;
+    }).join('\n');
+    const diarioCtx = histCtx || diarioDB.slice(-60).map(r => {
       const f = r.Fecha || '';
       const c = r.Cliente || '';
       const s = r.Sistema || '';
