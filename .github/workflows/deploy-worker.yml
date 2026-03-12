@@ -1,0 +1,31 @@
+name: Deploy Cloudflare Worker
+on:
+  push:
+    branches: [principal]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Worker
+        run: |
+          curl -X PUT "https://api.cloudflare.com/client/v4/accounts/5d6cf5cf1e543f1df0d3c1ccabaefb80/workers/scripts/pycseca-ia" \
+          -H "Authorization: Bearer ${{ secrets.CF_TOKEN }}" \
+          -H "Content-Type: application/javascript" \
+          --data 'export default {
+            async fetch(req) {
+              const h = {"Access-Control-Allow-Origin":"*","Content-Type":"application/json"};
+              if (req.method === "OPTIONS") return new Response(null, {headers: h});
+              if (req.method !== "POST") return new Response("\"ok\"", {headers: h});
+              try {
+                const b = await req.json();
+                const KEY = "AIzaSyA1AszHhfZ5qBrI36RxKT60yjIwWOFAWm4";
+                const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+KEY, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+                const d = await r.json();
+                return new Response(JSON.stringify(d), {headers: h});
+              } catch(e) {
+                return new Response(JSON.stringify({error:e.message}), {status:500,headers: h});
+              }
+            }
+          };'
