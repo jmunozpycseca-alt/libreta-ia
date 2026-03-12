@@ -715,7 +715,7 @@ body {
   <button class="tab" onclick="setTab('ruta')" id="tab-ruta"><span class="tab-icon">🗺️</span>RUTA</button>
   <button class="tab" onclick="setTab('direccion')" id="tab-direccion"><span class="tab-icon">🧭</span>DIRECCIÓN</button>
   <button class="tab" onclick="setTab('cierre')" id="tab-cierre"><span class="tab-icon">📊</span>EXCEL</button>
-  <button class="tab" onclick="setTab('conocimiento')" id="tab-conocimiento"><span class="tab-icon">✅</span>TAREAS</button>
+  <button class="tab" onclick="setTab('conocimiento')" id="tab-conocimiento"><span class="tab-icon">✅</span>TAREAS<span id="badge-tareas" style="display:none;background:#dc2626;color:white;font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;margin-left:4px;vertical-align:middle"></span></button>
 </div>
 
 <div class="content" id="content"></div>
@@ -758,12 +758,59 @@ body {
 
 <!-- TRABAJO MODAL -->
 <div class="trabajo-overlay" id="trabajoOverlay">
-  <div class="trabajo-box">
-    <div class="trabajo-title" id="trabajoTitle">¿Trabajo realizado?</div>
-    <input class="trabajo-input" id="trabajoInput" placeholder="Ej: Mto. trimestral PCI, extintores revisados" onkeydown="if(event.key==='Enter')previewTrabajo()">
-    <div class="trabajo-actions">
-      <button class="trabajo-skip" onclick="confirmarTrabajo(true)">Sin descripción</button>
-      <button class="trabajo-ok" onclick="previewTrabajo()">→ Revisar</button>
+  <div class="trabajo-box" style="max-width:400px;padding:0;overflow:hidden;border-radius:16px">
+    <!-- Cabecera -->
+    <div style="background:var(--accent);padding:14px 16px">
+      <div style="font-weight:800;font-size:14px;color:white" id="trabajoTitle">¿Trabajo realizado?</div>
+    </div>
+    <div style="padding:14px 16px;max-height:80vh;overflow-y:auto">
+      <!-- Estado -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <button id="btn-estado-fin" onclick="setEstadoCierre('Finalizado')"
+          style="padding:10px;background:#dcfce7;border:2px solid #16a34a;border-radius:10px;font-weight:800;font-size:13px;color:#16a34a;cursor:pointer">
+          ✓ Finalizado
+        </button>
+        <button id="btn-estado-pend" onclick="setEstadoCierre('Pendiente')"
+          style="padding:10px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;font-size:13px;color:var(--text2);cursor:pointer">
+          ⏸ Pendiente
+        </button>
+      </div>
+      <!-- Trabajo realizado -->
+      <div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:0.6px;margin-bottom:4px">TRABAJO REALIZADO</div>
+      <input class="trabajo-input" id="trabajoInput" placeholder="Ej: Mto. trimestral PCI, extintores revisados" onkeydown="if(event.key==='Enter')previewTrabajo()" style="margin-bottom:12px">
+      <!-- Equipos (opcional) -->
+      <div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:0.6px;margin-bottom:6px">EQUIPOS EN OFICINA <span style="font-weight:400;color:var(--text3)">(opcional)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Central intrusión</div>
+          <input id="eq-central" placeholder="Galaxy / Advisor..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Modelo central</div>
+          <input id="eq-central-modelo" placeholder="Flex / Dimension..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Grabador</div>
+          <input id="eq-grabador" placeholder="Scati / Onsafe..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Modelo grabador</div>
+          <input id="eq-grabador-modelo" placeholder="Modelo..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Central incendio</div>
+          <input id="eq-incendio" placeholder="Aritech / Vision..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Control acceso</div>
+          <input id="eq-acceso" placeholder="Salto / Honeywell..." style="width:100%;padding:7px 8px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);outline:none;box-sizing:border-box">
+        </div>
+      </div>
+      <!-- Botones -->
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="trabajo-skip" onclick="cerrarCierreOverlay()">Cancelar</button>
+        <button class="trabajo-ok" onclick="previewTrabajo()">→ Guardar</button>
+      </div>
     </div>
   </div>
 </div>
@@ -819,7 +866,7 @@ body {
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button onclick="copiarContextoPortapapeles()" style="padding:7px 12px;background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.3);border-radius:8px;font-size:12px;font-weight:700;color:white;cursor:pointer">📋 Copilot</button>
+      <button onclick="copiarContextoPortapapeles()" style="padding:7px 12px;background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.3);border-radius:8px;font-size:12px;font-weight:700;color:white;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:4px"><defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#4285f4"/><stop offset="50%" style="stop-color:#9b72cb"/><stop offset="100%" style="stop-color:#d96570"/></linearGradient></defs><path d="M12 2C12 2 13.5 8.5 18 10C13.5 11.5 12 18 12 18C12 18 10.5 11.5 6 10C10.5 8.5 12 2 12 2Z" fill="url(#gi)"/></svg>Gemini</button>
       <button onclick="resetChat()" style="padding:7px 10px;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);border-radius:8px;font-size:14px;color:rgba(255,255,255,0.8);cursor:pointer">🗑</button>
       <div class="chat-drawer-close" onclick="cerrarChatDrawer()">✕</div>
     </div>
@@ -1066,6 +1113,8 @@ window.onload = () => {
     `${dias[hoy.getDay()]} ${pad(hoy.getDate())}/${pad(hoy.getMonth()+1)}/${hoy.getFullYear()}`;
   cargarStorage();
   renderContent();
+  actualizarBadgeTareas();
+  setTimeout(mostrarAlertaArranque, 800);
 };
 
 function pad(n){ return String(n).padStart(2,'0'); }
@@ -1220,13 +1269,12 @@ function renderAnalisis(c){
   const nOficinas  = Object.keys(historialLocal).length;
   h += `<div class="paste-label">ARCHIVOS</div>
   <div class="archivos-row">
-    <label class="archivo-card ${diarioCargado?'cargado':nHistorial>0?'cargado':''}" style="cursor:pointer;text-align:center;position:relative;overflow:hidden">
-      <input type="file" accept=".xlsx,.xls" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="cargarDiario(this)">
-      <div class="archivo-icon">${nHistorial>0?'📱':diarioCargado?'✅':'📂'}</div>
+    <div class="archivo-card ${nHistorial>0?'cargado':''}" style="text-align:center">
+      <div class="archivo-icon">${nHistorial>0?'📱':'📋'}</div>
       <div class="archivo-name">HISTORIAL</div>
-      <div class="archivo-status">${nHistorial>0 ? nHistorial+' visitas · '+nOficinas+' oficinas' : diarioCargado ? diarioDB.length+' registros' : 'Opcional — carga 1 vez'}</div>
-      ${nHistorial>0 ? `<div style="font-size:10px;color:#888;margin-top:2px">Auto · App</div>` : diarioCargado ? `<div style="font-size:10px;color:#888;margin-top:2px">${localStorage.getItem('rt_diario_fecha')||''}</div>` : ''}
-    </label>
+      <div class="archivo-status">${nHistorial>0 ? nHistorial+' visitas · '+nOficinas+' oficinas' : 'Se llena automático'}</div>
+      ${nHistorial>0 ? `<div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700">✓ Auto · App</div>` : `<div style="font-size:10px;color:#888;margin-top:2px">Al cerrar avisos</div>`}
+    </div>
     <label class="archivo-card ${infoCargado?'cargado':''}" style="cursor:pointer;text-align:center;position:relative;overflow:hidden">
       <input type="file" accept=".xlsx,.xls" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="cargarInfo(this)">
       <div class="archivo-icon">${infoCargado?'✅':'📂'}</div>
@@ -1234,11 +1282,7 @@ function renderAnalisis(c){
       <div class="archivo-status">${infoCargado ? infoDB.length+' registros' : 'Toca para cargar'}</div>
       ${infoCargado ? `<div style="font-size:10px;color:#888;margin-top:2px">${localStorage.getItem('rt_info_fecha')||''}</div>` : ''}
     </label>
-  </div>
-  ${diarioCargado && nHistorial===0 ? `
-  <button onclick="sembrarHistorialDesdeDiario()" style="width:100%;margin-bottom:8px;padding:10px;background:#1d4ed8;border:none;border-radius:10px;color:white;font-weight:700;font-size:13px;cursor:pointer">
-    📥 Importar historial del Diario (una vez)
-  </button>` : ''}`;
+  </div>`;
 
   if(!infoCargado){
     h += `<div class="alerta alerta-warn" style="margin-bottom:10px">
@@ -1261,7 +1305,7 @@ function renderAnalisis(c){
     </button>
     <button onclick="copiarContextoCopilot()"
       style="flex:2;padding:12px;background:linear-gradient(135deg,#0078d4,#005a9e);border:2px solid #004c8c;border-radius:10px;color:white;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
-      📋 Copilot
+      <svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:4px"><defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#4285f4"/><stop offset="50%" style="stop-color:#9b72cb"/><stop offset="100%" style="stop-color:#d96570"/></linearGradient></defs><path d="M12 2C12 2 13.5 8.5 18 10C13.5 11.5 12 18 12 18C12 18 10.5 11.5 6 10C10.5 8.5 12 2 12 2Z" fill="url(#gi)"/></svg>Gemini
     </button>` : ''}
   </div>`;
   if(iaResumen){
@@ -1679,10 +1723,17 @@ function cargarClientes(input){
           // Parsear fechas de revisión existentes
           const fmtFecha = v => {
             if(!v) return '';
+            // Número serial de Excel (fechas guardadas como número)
+            if(typeof v === 'number' || (typeof v === 'string' && /^\d{5}$/.test(String(v).trim()))){
+              const n = parseInt(v);
+              if(n > 1000){
+                const d = new Date(Math.round((n - 25569)*86400*1000));
+                if(!isNaN(d)) return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+'/'+d.getUTCFullYear();
+              }
+            }
             const s = String(v).trim();
             if(!s || s==='0' || s.toLowerCase()==='null') return '';
-            // Si es fecha Excel (número) ya viene como string de fecha
-            // Normalizar a DD/MM/YYYY o DD/MM
+            // Normalizar a DD/MM o DD/MM/YYYY
             const match = s.match(/(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?/);
             if(match) return match[1].padStart(2,'0')+'/'+match[2].padStart(2,'0')+(match[3]?'/'+match[3]:'');
             return s.substring(0,10);
@@ -1893,7 +1944,9 @@ function parsearBloque(texto){
   // Ej: "(66567)C/ Teatro" → "(66567)\nC/ Teatro"
   const textoNorm = texto
     .replace(/(\)\s*)([A-ZÁÉÍÓÚÑC][\/\s])/g, '$1\n$2')
-    .replace(/(\.\w{3}\))\s*([A-ZÁÉÍÓÚÑ])/g, '$1\n$2');
+    .replace(/(\.\w{3}\))\s*([A-ZÁÉÍÓÚÑ])/g, '$1\n$2')
+    .replace(/\)(Calle|Avda?\.|Avenida|Plaza|Plza?\.|Camino|Carrer|Carretera|C\/)/gi, ')\n$1')
+    .replace(/(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)(INC\d+)/gi, '$1\n$2');
 
   const lineasDir = textoNorm.split(/\n/);
   const reProv = /VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA/i;
@@ -2773,6 +2826,7 @@ function crearTareaModal(){
   const hora  = document.getElementById('taresHoraModal')?.value;
   if(!texto){ toast('Escribe la tarea primero'); return; }
   tareas.push({ id: Date.now(), texto, fecha, hora, alarmaCreada: false });
+  actualizarBadgeTareas();
   guardarStorage();
   document.getElementById('trabajoOverlay').classList.remove('open');
   updateStats();
@@ -2982,6 +3036,7 @@ function crearTarea(){
 
 function eliminarTarea(idx){
   tareas.splice(idx, 1);
+  actualizarBadgeTareas();
   guardarStorage();
   renderContent();
 }
@@ -3010,6 +3065,7 @@ function crearEventoAviso(idx){
 
 function eliminarEvento(idx){
   eventosCalendario.splice(idx, 1);
+  actualizarBadgeTareas();
   guardarStorage();
   renderContent();
 }
@@ -3676,12 +3732,12 @@ function abrirClaudeConContexto(){
       <div style="font-size:16px;font-weight:800;color:#1a1a1a;margin-bottom:6px">${copiado ? '✓ Copiado' : 'Listo'} — ${nReg} registros</div>
       <div style="font-size:14px;color:#555;line-height:1.6;margin-bottom:20px">
         ${copiado
-          ? 'Texto copiado al portapapeles.<br>En Copilot <strong>mantén pulsado → Pegar</strong> y envía.'
-          : 'Pulsa "Abrir Copilot", luego mantén pulsado en el chat y selecciona <strong>Pegar</strong>.'}
+          ? 'Texto copiado al portapapeles.<br>En Gemini <strong>mantén pulsado → Pegar</strong> y envía.'
+          : 'Pulsa "Abrir Gemini", luego mantén pulsado en el chat y selecciona <strong>Pegar</strong>.'}
       </div>
       <button id="btnAbrirCopilot"
         style="width:100%;padding:15px;background:#0078d4;border:none;border-radius:10px;color:white;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:8px">
-        Abrir Copilot →
+        Abrir Gemini →
       </button>
       <button onclick="this.parentElement.parentElement.remove()"
         style="width:100%;padding:11px;background:transparent;border:none;color:#888;font-size:14px;cursor:pointer">
@@ -3692,7 +3748,7 @@ function abrirClaudeConContexto(){
 
   document.getElementById('btnAbrirCopilot').addEventListener('click', function(){
     overlay.remove();
-    window.open('https://copilot.microsoft.com', '_blank');
+    window.open('https://gemini.google.com', '_blank');
   });
 }
 
@@ -4732,14 +4788,14 @@ function copiarContextoCopilot(){
   ).join('\n\n');
   const texto = `Soy técnico de seguridad Pycseca. Estos son mis avisos de hoy ${getFecha()}:\n\n${lineas}\n\n`;
   navigator.clipboard.writeText(texto)
-    .then(()=>{ toast('✓ Copiado — abre Copilot y pega'); window.open('https://copilot.microsoft.com','_blank'); })
+    .then(()=>{ toast('✓ Copiado para Gemini'); window.open('https://gemini.google.com','_blank'); })
     .catch(()=>{ 
       // Fallback
       const ta = document.createElement('textarea');
       ta.value = texto; document.body.appendChild(ta); ta.select();
       document.execCommand('copy'); document.body.removeChild(ta);
-      toast('✓ Copiado — abre Copilot y pega');
-      window.open('https://copilot.microsoft.com','_blank');
+      toast('✓ Copiado para Gemini');
+      window.open('https://gemini.google.com','_blank');
     });
 }
 
@@ -5074,10 +5130,17 @@ function toggleCard(idx){ if(avisosAbiertos.has(idx)) avisosAbiertos.delete(idx)
 function cambiarEstado(idx,estado){
   if(estado==='Finalizado'){
     pendingFinalizar=idx;
+    _estadoCierre = 'Finalizado';
     document.getElementById('trabajoTitle').textContent=`¿Trabajo en ${tabla[idx].cliente} ${tabla[idx].oficina||''}?`;
     document.getElementById('trabajoInput').value=tabla[idx].trabajo||'';
+    // Limpiar campos equipo
+    ['eq-central','eq-central-modelo','eq-grabador','eq-grabador-modelo','eq-incendio','eq-acceso'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value='';
+    });
+    // Resetear botones estado
+    setEstadoCierre('Finalizado');
     document.getElementById('trabajoOverlay').classList.add('open');
-    setTimeout(()=>document.getElementById('trabajoInput').focus(),100);
+    setTimeout(()=>{ document.getElementById('trabajoInput').focus(); rellenarEquiposCierre(tabla[idx]); },150);
   } else {
     tabla[idx].estado=estado;
     if(estado==='Finalizado'||estado==='Finalizado con incidencia') guardarEnHistorialLocal(tabla[idx]);
@@ -5103,22 +5166,79 @@ function seleccionarAviso(idx){
   renderContent();
 }
 
+// Estado del cierre
+let _estadoCierre = 'Finalizado';
+
+function setEstadoCierre(estado){
+  _estadoCierre = estado;
+  const btnFin = document.getElementById('btn-estado-fin');
+  const btnPend = document.getElementById('btn-estado-pend');
+  if(!btnFin || !btnPend) return;
+  if(estado === 'Finalizado'){
+    btnFin.style.background='#dcfce7'; btnFin.style.border='2px solid #16a34a'; btnFin.style.color='#16a34a';
+    btnPend.style.background='var(--bg2)'; btnPend.style.border='1.5px solid var(--border2)'; btnPend.style.color='var(--text2)';
+  } else {
+    btnPend.style.background='#fff7ed'; btnPend.style.border='2px solid #ea580c'; btnPend.style.color='#ea580c';
+    btnFin.style.background='var(--bg2)'; btnFin.style.border='1.5px solid var(--border2)'; btnFin.style.color='var(--text2)';
+  }
+}
+
+function cerrarCierreOverlay(){
+  document.getElementById('trabajoOverlay').classList.remove('open');
+  pendingFinalizar = null;
+  _estadoCierre = 'Finalizado';
+}
+
+function leerEquiposCierre(){
+  return {
+    central:     (document.getElementById('eq-central')?.value||'').trim(),
+    centralMod:  (document.getElementById('eq-central-modelo')?.value||'').trim(),
+    grabador:    (document.getElementById('eq-grabador')?.value||'').trim(),
+    grabadorMod: (document.getElementById('eq-grabador-modelo')?.value||'').trim(),
+    incendio:    (document.getElementById('eq-incendio')?.value||'').trim(),
+    acceso:      (document.getElementById('eq-acceso')?.value||'').trim(),
+  };
+}
+
+function rellenarEquiposCierre(aviso){
+  // Pre-rellenar con datos ya conocidos del historial
+  const sistema = String(aviso.sistema||'').trim();
+  const key = sistema ? 'sis_'+sistema.replace(/\D/g,'') : 'cli_'+(aviso.cliente||'').toUpperCase().replace(/\s/g,'')+'_'+(aviso.localidad||'').toUpperCase().replace(/\s/g,'');
+  const hist = historialLocal[key];
+  if(!hist || !hist.length) return;
+  const ultimo = hist[0]; // más reciente
+  if(ultimo.equipos){
+    if(ultimo.equipos.central)     { const el=document.getElementById('eq-central');     if(el) el.value=ultimo.equipos.central; }
+    if(ultimo.equipos.centralMod)  { const el=document.getElementById('eq-central-modelo'); if(el) el.value=ultimo.equipos.centralMod; }
+    if(ultimo.equipos.grabador)    { const el=document.getElementById('eq-grabador');    if(el) el.value=ultimo.equipos.grabador; }
+    if(ultimo.equipos.grabadorMod) { const el=document.getElementById('eq-grabador-modelo'); if(el) el.value=ultimo.equipos.grabadorMod; }
+    if(ultimo.equipos.incendio)    { const el=document.getElementById('eq-incendio');    if(el) el.value=ultimo.equipos.incendio; }
+    if(ultimo.equipos.acceso)      { const el=document.getElementById('eq-acceso');      if(el) el.value=ultimo.equipos.acceso; }
+  }
+}
+
 function confirmarTrabajo(skip=false){
   const t=document.getElementById('trabajoInput').value.trim();
-  tabla[pendingFinalizar].estado='Finalizado';
+  const equipos = leerEquiposCierre();
+  tabla[pendingFinalizar].estado = _estadoCierre;
   if(!skip && t){
     tabla[pendingFinalizar].trabajo_realizado = t;
     tabla[pendingFinalizar].trabajo = t;
   }
+  // Guardar equipos en el aviso
+  const hayEquipos = Object.values(equipos).some(v=>v);
+  if(hayEquipos) tabla[pendingFinalizar].equipos = equipos;
   // Guardar en historial local
   guardarEnHistorialLocal(tabla[pendingFinalizar]);
   // Auto-marcar MTO si corresponde
-  autoMarcarMTO(tabla[pendingFinalizar]);
+  if(_estadoCierre === 'Finalizado') autoMarcarMTO(tabla[pendingFinalizar]);
   document.getElementById('trabajoOverlay').classList.remove('open');
-  pendingFinalizar=null; guardarStorage(); renderContent(); toast('✓ Finalizado');
+  _estadoCierre = 'Finalizado';
+  pendingFinalizar=null; guardarStorage(); renderContent(); toast('✓ '+(_estadoCierre==='Finalizado'?'Finalizado':'Guardado'));
 }
 
-// Guardar visita en historial local (máx 5 por oficina)
+// Guardar visita en historial local (máx 20 por oficina — CCTV, sobrescribe el más antiguo)
+const HIST_MAX = 20;
 function guardarEnHistorialLocal(aviso){
   if(!aviso || aviso._separador) return;
   // Clave por sistema (código) o por cliente+localidad
@@ -5131,15 +5251,24 @@ function guardarEnHistorialLocal(aviso){
   if(!historialLocal[key]) historialLocal[key]=[];
   const entrada = {
     fecha: getFecha(),
-    trabajo: (aviso.trabajo_realizado||aviso.trabajo||aviso.trabajo_desc||'').substring(0,100),
+    trabajo: (aviso.trabajo_realizado||aviso.trabajo||aviso.trabajo_desc||''),
     estado: aviso.estado||'Finalizado',
     sistema: sistema,
     cliente: aviso.cliente||'',
     oficina: aviso.oficina||'',
     localidad: aviso.localidad||''
   };
+  // Guardar equipos si los hay (última escritura gana)
+  if(aviso.equipos && Object.values(aviso.equipos).some(v=>v)){
+    entrada.equipos = aviso.equipos;
+    // Actualizar también entradas anteriores de la misma oficina
+    if(historialLocal[key]) historialLocal[key].forEach(h => { if(!h.equipos) h.equipos = aviso.equipos; });
+  } else if(historialLocal[key] && historialLocal[key][0] && historialLocal[key][0].equipos){
+    // Heredar equipos de la visita anterior si no se han rellenado
+    entrada.equipos = historialLocal[key][0].equipos;
+  }
   historialLocal[key].unshift(entrada); // más reciente primero
-  historialLocal[key] = historialLocal[key].slice(0,5); // máx 5
+  if(historialLocal[key].length > HIST_MAX) historialLocal[key] = historialLocal[key].slice(0, HIST_MAX); // CCTV: sobrescribe el más antiguo
 }
 
 // Sembrar historial local desde Diario.xlsx (operación única)
@@ -5974,7 +6103,7 @@ function copiarContextoPortapapeles(){
   const ctx = construirContextoChat('Contexto completo de PycLibreta para el técnico de seguridad Pycseca Valencia:');
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(ctx)
-      .then(()=> toast('📋 Contexto copiado — pégalo en Copilot'))
+      .then(()=> toast('📋 Contexto copiado — pégalo en Gemini'))
       .catch(()=> copiarFallback(ctx));
   } else {
     copiarFallback(ctx);
@@ -5989,7 +6118,7 @@ function copiarFallback(texto){
   ta.focus(); ta.select();
   try {
     document.execCommand('copy');
-    toast('📋 Contexto copiado — pégalo en Copilot');
+    toast('📋 Contexto copiado — pégalo en Gemini');
   } catch(e) {
     toast('No se pudo copiar — usa HTTPS (GitHub Pages)');
   }
@@ -6149,6 +6278,55 @@ function programarNotificacionesPendientes(){
       toast(`🔔 Notificación programada para ${t.hora}`);
     }
   });
+}
+
+// ============================================================
+// BADGE TAREAS + ALERTA ARRANQUE
+// ============================================================
+function actualizarBadgeTareas(){
+  const badge = document.getElementById('badge-tareas');
+  if(!badge) return;
+  const hoy = new Date();
+  const hoyISO = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  const pendHoy = [
+    ...tareas.filter(t => t.fecha && t.fecha <= hoyISO),
+    ...eventosCalendario.filter(e => e.fecha && e.fecha === hoyISO)
+  ].length;
+  if(pendHoy > 0){
+    badge.textContent = pendHoy;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function mostrarAlertaArranque(){
+  const hoy = new Date();
+  const hoyISO = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  const mananaISO = (() => { const d=new Date(hoy); d.setDate(d.getDate()+1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+
+  const tareasHoy = tareas.filter(t => t.fecha && t.fecha <= hoyISO);
+  const eventosHoy = eventosCalendario.filter(e => e.fecha === hoyISO);
+  const tareasMañana = tareas.filter(t => t.fecha === mananaISO);
+
+  if(tareasHoy.length === 0 && eventosHoy.length === 0) return;
+
+  let lineas = [];
+  tareasHoy.forEach(t => lineas.push('📋 '+(t.texto||'Tarea')+(t.hora?' · '+t.hora:'')));
+  eventosHoy.forEach(e => lineas.push('📅 '+(e.titulo||e.texto||'Evento')+(e.hora?' · '+e.hora:'')));
+  if(tareasMañana.length > 0) lineas.push('⏰ Mañana: '+tareasMañana.length+' tarea'+(tareasMañana.length>1?'s':''));
+
+  // Mostrar banner en cabecera
+  const header = document.querySelector('.header-inner') || document.querySelector('.header');
+  if(!header) return;
+  const banner = document.createElement('div');
+  banner.id = 'alerta-arranque';
+  banner.style.cssText = 'background:#1e3a5f;color:white;padding:8px 14px;font-size:12px;font-weight:600;line-height:1.6;cursor:pointer;border-top:1px solid rgba(255,255,255,0.15)';
+  banner.innerHTML = '🔔 <strong>Hoy:</strong> '+lineas.join(' &nbsp;·&nbsp; ')+'  <span style="opacity:0.6;float:right">✕</span>';
+  banner.onclick = () => { banner.remove(); setTab('conocimiento'); };
+  header.parentNode.insertBefore(banner, header.nextSibling);
+  // Auto-ocultar tras 8 segundos
+  setTimeout(() => { if(banner.parentNode) banner.remove(); }, 8000);
 }
 
 // Init
