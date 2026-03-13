@@ -1,4 +1,99 @@
 <!DOCTYPE html>
+<!--
+===========================================================
+PYCLIBRETA — CONTEXTO DEL PROYECTO (leer al iniciar sesión)
+===========================================================
+
+APP: PycLibreta — PWA técnico seguridad Pycseca Valencia
+URL: https://jmunozpycseca-alt.github.io/libreta-ia/LibretaIA.html
+Repositorio: github.com/jmunozpycseca-alt/libreta-ia (rama: principal)
+
+== CLOUDFLARE WORKER ==
+Worker: pycseca-ia
+URL: https://pycseca-ia.jmunoz-pycseca.workers.dev
+Account ID: 5d6cf5cf1e543f1df0d3c1ccabaefb80
+API Token (CF_TOKEN): RdotYdv6azPn3ochpqHuqk3eavXiDdVoPXClF-kl
+Gemini key: AIzaSyA1AszHhfZ5qBrI36RxKT60yjIwWOFAWm4
+⚠ El workflow deploy-worker.yml debe tener solo workflow_dispatch (no push automático)
+⚠ La IA solo funciona desde GitHub Pages, NO desde archivo local
+
+== ARCHIVOS ==
+- LibretaIA.html — app principal (este archivo)
+- manifest.json + iconos — PWA
+- Info2026.xlsx — hojas: Equipos, general, InfoTecnica, personal, Festivos
+- Clientes.xlsx — 18 hojas ZONA 1A..6C, ~750 oficinas
+- Diario_2026.xlsx — avisos del día (se carga cada mañana)
+- .github/workflows/deploy-worker.yml — solo workflow_dispatch
+
+== EXCEL Diario_2026.xlsx — MAPEO REAL DE COLUMNAS ==
+Fecha→Fecha, NºAviso→CodCliente, Sistema→Cliente, Cliente→Entidad,
+Entidad→Localidad, Localidad→Direccion, Direccion→Sistema,
+Trabajo→Etiquetas, Estado→Año
+
+== CLIENTES Y COLORES ==
+- Cajamar / Caja Rural / Caixa Rural → verde #009A44
+- BBVA → azul #004A8F
+- Sprinter → morado #6D1FBF
+- Supermercados Día → rojo #E30613
+- Repsol / Plenergy / Campsa → naranja #FF6600
+- JD → verde #15803d
+- Solvia → azul oscuro #003087
+- Resto → rojo Pycseca
+
+== PARSEO BETA (avisos) ==
+Formatos especiales detectados:
+- INC000000000 → Cajamar, Caixa Rural
+- 000XXXXXXXXX → BBVA
+- TASKXXXXXXX → Supermercados DIA, Plenergy
+- Número 9 dígitos suelto → Campsa
+- [CG - SOLVIA] o [Z2 - SOLVIA] → cliente Solvia
+- Sistema CG-XXXXX-0001 → Solvia
+- "SE ANULA..." → trabajo Plenergy sin TASK
+- Provincias activas: VALENCIA, CASTELLON (resto son de otras delegaciones)
+
+== LOCALSTORAGE KEYS ==
+rt_tabla, rt_fecha, rt_analisis, rt_seleccion — se borran al cambiar día
+rt_diario, rt_info, rt_tareas, rt_eventos — persisten
+rt_historial_local — historialLocal JSON (max 20 entradas por oficina)
+rt_clientes, rt_clientes_fecha — Clientes.xlsx cacheado
+rt_conocimiento_filas — filas generadas para Info2026
+
+== FUNCIONES CLAVE ==
+- parsearBloque(texto) — parsea un aviso de Beta
+- ordenarPorCercania(avisos) — nearest neighbor desde PYCSECA [39.4850, -0.3950]
+- claudeChat(system, messages, maxTokens) — llama al Worker Gemini
+- copiarContextoCopilot() — abre overlay con contexto para Gemini
+- mostrarAlertaArranque() — banner tareas al arrancar
+- actualizarBadgeTareas() — badge rojo en pestaña TAREAS
+- cerrarAviso(aviso) — ventana cierre con campos equipos
+
+== VENTANA CIERRE DE AVISO ==
+Campos: Central intrusión+Modelo, Grabador+Modelo, Central incendio, Control acceso
+Se pre-rellena con última visita conocida del historialLocal
+Botones: ✓ Finalizado (verde) / ⏸ Pendiente (naranja)
+
+== HISTORIAL LOCAL ==
+Clave: 'sis_'+sistema.replace(/\D/g,'') o 'cli_'+CLIENTE_LOCALIDAD
+Max 20 entradas por oficina (HIST_MAX=20)
+Cada entrada: {fecha, trabajo, estado, sistema, cliente, localidad, equipos}
+
+== PENDIENTES ==
+1. Workflow deploy-worker.yml — quitar push automático (solo workflow_dispatch)
+2. Al tocar tarjeta HISTORIAL → mostrar resumen últimas visitas
+3. Generador mensual hoja Equipos en Info2026
+4. Mejora visual calendario
+5. Evento automático último día del mes
+
+== NOTAS TÉCNICAS ==
+- HTML monolítico sin framework ni build
+- JS verificado con: node --check
+- Reemplazos con caracteres especiales: usar Python content.replace()
+- Al subir desde móvil GitHub añade -1 si ya existe — renombrar antes
+- xlsx.full.min.js + jsPDF 2.5.1
+- Fuentes: DM Sans + DM Mono
+===========================================================
+-->
+
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1115,6 +1210,7 @@ window.onload = () => {
   renderContent();
   actualizarBadgeTareas();
   setTimeout(mostrarAlertaArranque, 800);
+  crearEventoFinMes();
 };
 
 function pad(n){ return String(n).padStart(2,'0'); }
@@ -1251,7 +1347,9 @@ function getColorCliente(nombre){
   // Repsol — amarillo oscuro
   if(/repsol/.test(n)) return { border:'#c49900', bg:'#fffbe0', txt:'#a07800' };
   // Plenergy — verde eléctrico
-  if(/plenergy/.test(n)) return { border:'#00A651', bg:'#f0fdf5', txt:'#007a3d' };
+  if(/plenergy/i.test(n)) return { border:'#FF6600', bg:'#fff7ed', txt:'#c2410c' };
+  // Solvia
+  if(/solvia/i.test(n)) return { border:'#003087', bg:'#eff4ff', txt:'#003087' };
   // Orange
   if(/\borange\b/.test(n)) return { border:'#FF6600', bg:'#fff5ee', txt:'#cc5200' };
   // Cajamar / Caja Rural / Ruralcaja / cualquier banco/caja que no sea BBVA
@@ -1269,11 +1367,12 @@ function renderAnalisis(c){
   const nOficinas  = Object.keys(historialLocal).length;
   h += `<div class="paste-label">ARCHIVOS</div>
   <div class="archivos-row">
-    <div class="archivo-card ${nHistorial>0?'cargado':''}" style="text-align:center">
+    <div class="archivo-card ${nHistorial>0?'cargado':''}" style="text-align:center;cursor:${nHistorial>0?'pointer':'default'}"
+      onclick="${nHistorial>0?'mostrarResumenHistorial()':''}">
       <div class="archivo-icon">${nHistorial>0?'📱':'📋'}</div>
       <div class="archivo-name">HISTORIAL</div>
       <div class="archivo-status">${nHistorial>0 ? nHistorial+' visitas · '+nOficinas+' oficinas' : 'Se llena automático'}</div>
-      ${nHistorial>0 ? `<div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700">✓ Auto · App</div>` : `<div style="font-size:10px;color:#888;margin-top:2px">Al cerrar avisos</div>`}
+      ${nHistorial>0 ? `<div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700">✓ Toca para ver</div>` : `<div style="font-size:10px;color:#888;margin-top:2px">Al cerrar avisos</div>`}
     </div>
     <label class="archivo-card ${infoCargado?'cargado':''}" style="cursor:pointer;text-align:center;position:relative;overflow:hidden">
       <input type="file" accept=".xlsx,.xls" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="cargarInfo(this)">
@@ -1321,7 +1420,26 @@ function renderAnalisis(c){
     <div class="paste-label">${analisisResultado.length} AVISOS DETECTADOS</div>
     <div id="analisisCards">`;
 
+    let _clienteAnterior = null;
     analisisResultado.forEach((a,i)=>{
+      // Separador visual entre grupos de clientes
+      if(a.cliente && a.cliente !== _clienteAnterior && _clienteAnterior !== null){
+        const cc2 = getColorCliente(a.cliente);
+        h += `<div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px">
+          <div style="flex:1;height:1.5px;background:${cc2.border};opacity:0.3"></div>
+          <div style="font-size:10px;font-weight:800;color:${cc2.border};letter-spacing:0.5px;white-space:nowrap">${a.cliente.toUpperCase()}</div>
+          <div style="flex:1;height:1.5px;background:${cc2.border};opacity:0.3"></div>
+        </div>`;
+      } else if(_clienteAnterior === null && a.cliente){
+        const cc2 = getColorCliente(a.cliente);
+        h += `<div style="display:flex;align-items:center;gap:8px;margin:4px 0 4px">
+          <div style="flex:1;height:1.5px;background:${cc2.border};opacity:0.3"></div>
+          <div style="font-size:10px;font-weight:800;color:${cc2.border};letter-spacing:0.5px;white-space:nowrap">${a.cliente.toUpperCase()}</div>
+          <div style="flex:1;height:1.5px;background:${cc2.border};opacity:0.3"></div>
+        </div>`;
+      }
+      _clienteAnterior = a.cliente;
+
       const numAlertas = a.alertas.length;
       const tieneError  = a.alertas.some(al=>al.tipo==='festivo');
       const tieneWarn   = a.alertas.some(al=>al.tipo==='warn'||al.tipo==='horario');
@@ -1812,7 +1930,23 @@ function parsearAvisos(){
         analisisResultado = [...nuevos, ...analisisResultado.filter(a => !nuevos.some(n=>n.aviso===a.aviso))];
         toast(`🆕 ${nuevos.length} avisos nuevos · ${existentes.length} ya existentes`);
       } else {
-        analisisResultado = parseados;
+        // Ordenar por cliente — mismos clientes juntos
+        // Dentro de cada cliente, ordenar por cercanía desde Valencia
+        const clientesOrden = [...new Set(parseados.map(a=>a.cliente||''))];
+        clientesOrden.sort((a,b) => a.localeCompare(b,'es'));
+        const grupos = {};
+        parseados.forEach(a => {
+          const c = a.cliente||'';
+          if(!grupos[c]) grupos[c] = [];
+          grupos[c].push(a);
+        });
+        // Ordenar cada grupo por cercanía
+        const ordenados = [];
+        clientesOrden.forEach(c => {
+          const g = ordenarPorCercania(grupos[c]||[]);
+          g.forEach(a => ordenados.push(a));
+        });
+        analisisResultado = ordenados;
         toast(`✓ ${analisisResultado.length} avisos detectados`);
       }
 
@@ -1934,16 +2068,25 @@ function parsearBloque(texto){
   const todosINC = textoLimpio.match(/INC\d{9,}/g) || [];
   if(todosINC.length > 0) a.aviso = todosINC.slice().sort().reverse()[0];
   else {
-    // 2. 000 seguido de 8+ dígitos (BBVA) — sin word boundary porque va pegado a texto
+    // 2. 000 seguido de 8+ dígitos (BBVA)
     const numM = textoLimpio.match(/(000\d{8,})/);
     if(numM) a.aviso = numM[1];
+    else {
+      // 3. TASK seguido de dígitos (DIA, Plenergy)
+      const taskM = textoLimpio.match(/TASK(\d{5,})/i);
+      if(taskM) a.aviso = 'TASK'+taskM[1];
+      else {
+        // 4. Número de 9 dígitos suelto (CAMPSA, otros)
+        const n9M = textoLimpio.match(/\b(\d{9})\b/);
+        if(n9M) a.aviso = n9M[1];
+      }
+    }
   }
-  // Si no hay ninguno → vacío (Aquae y similares)
 
   // ── OFICINA ───────────────────────────────────────────────
   // Número (o letra+número) inmediatamente después de "sistema"
-  const ofM = texto.match(/\bsistema\s+([A-Z]?\d[\w\-]*)/i);
-  if(ofM && ofM[1] && !/^[A-Z]{3,}/.test(ofM[1])) {
+  const ofM = texto.match(/\bsistema\s+([A-Z]{1,2}[-\d][\.\w\-]*)/i);
+  if(ofM && ofM[1] && !/^[A-Z]{4,}/.test(ofM[1])) {
     a.oficina = ofM[1];
   }
 
@@ -1953,8 +2096,8 @@ function parsearBloque(texto){
   const textoNorm = texto
     .replace(/(\)\s*)([A-ZÁÉÍÓÚÑC][\/\s])/g, '$1\n$2')
     .replace(/(\.\w{3}\))\s*([A-ZÁÉÍÓÚÑ])/g, '$1\n$2')
-    .replace(/\)(Calle|Avda?\.|Avenida|Plaza|Plza?\.|Camino|Carrer|Carretera|C\/)/gi, ')\n$1')
-    .replace(/(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)(INC\d+)/gi, '$1\n$2');
+    .replace(/\)(Calle|Avda?\.|Avenida|Plaza|Plza?\.|Camino|Carrer|Carretera|C\/|Medi |Virgen|Luis|Empedra)/gi, ')\n$1')
+    .replace(/(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)(INC\d+|TASK\d+|SE ANULA)/gi, '$1\n$2').replace(/(\d{7,10}\))(\w)/g, '$1\n$2');
 
   const lineasDir = textoNorm.split(/\n/);
   const reProv = /VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA/i;
@@ -1981,6 +2124,11 @@ function parsearBloque(texto){
     const m = linea.match(/^([A-ZÁÉÍÓÚÑ][^\n]{3,50}?)\s*-\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s[A-ZÁÉÍÓÚÑa-záéíóúñ]+)*)\s*-\s*(VALENCIA|ALBACETE|CUENCA|ALICANTE|CASTELLON|CASTELLÓN|MURCIA|TERUEL|MADRID|TOLEDO|GUADALAJARA)/i);
     if(m && !m[1].match(/sistema|AVERÍA|MANT|SEGURIDAD|OT-|INC\d/i) && m[1].length > 3){
       dirLineaSinCP = m; break;
+    }
+    // Solvia y otros: "Calle X - Localidad - Valencia/València"
+    const m2 = linea.match(/^([A-ZÁÉÍÓÚÑ][^\n]{3,60}?)\s*-\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s[A-ZÁÉÍÓÚÑa-záéíóúñ]+)*)\s*-\s*(Valencia\/|VALENCIA\/)/i);
+    if(m2 && !m2[1].match(/sistema|AVERÍA|MANT|SEGURIDAD|OT-/i)){
+      dirLineaSinCP = m2; break;
     }
   }
 
@@ -2030,16 +2178,23 @@ function parsearBloque(texto){
         .trim().substring(0,120);
     }
   } else {
-    // Sin INC: Aquae, Sprinter, mantenimientos, instalaciones BBVA sin INC
-    // Buscar descripción después de la dirección
-    const mSust = texto.match(/(?:SUSTITUCION|INSTALACION|CAMBIO|RETIRAR|RETIRADO)[^\n]{5,}/i);
-    const mLibre = texto.match(/VALENCIA[\/A-ZÁ]*\s*\n([a-záéíóúñA-ZÁÉÍÓÚÑ].{10,})/i);
-    const mTipo = texto.match(/^(MANT\.\s+[\w\.]+\s+de\s+[\w\.\s]+?)(?:\s+de\s+sistema|\n|$)/im);
-    const mProblema = texto.match(/(?:problemas?\s+con|fallo|sin\s+comunicaci)[^\n]{5,}/i);
-    if(mSust) a.trabajo = mSust[0].replace(/\s*NODEF.*/i,'').trim().substring(0,120);
-    else if(mLibre) a.trabajo = mLibre[1].replace(/\s*NODEF.*/i,'').trim().substring(0,100);
-    else if(mProblema) a.trabajo = mProblema[0].trim().substring(0,100);
-    else if(mTipo) a.trabajo = mTipo[1].trim();
+    // Sin INC: buscar TASK, luego texto libre
+    const taskIdx = a.aviso && a.aviso.startsWith('TASK') ? texto.indexOf(a.aviso.replace('TASK','TASK')) : -1;
+    if(taskIdx >= 0){
+      const restoTask = texto.substring(taskIdx + a.aviso.length).trim();
+      a.trabajo = restoTask.replace(/\s*NODEF.*/i,'').replace(/\n+(Avería|Revisión|NODEF).*/i,'').trim().substring(0,120);
+    } else {
+      const mSust = texto.match(/(?:SUSTITUCION|INSTALACION|CAMBIO|RETIRAR|RETIRADO)[^\n]{5,}/i);
+      const mLibre = texto.match(/VALENCIA[\/A-ZÁ]*\s*\n([a-záéíóúñA-ZÁÉÍÓÚÑ].{10,})/i);
+      const mTipo = texto.match(/^(MANT\.\s+[\w\.]+\s+de\s+[\w\.\s]+?)(?:\s+de\s+sistema|\n|$)/im);
+      const mProblema = texto.match(/(?:problemas?\s+con|fallo|sin\s+comunicaci)[^\n]{5,}/i);
+      const mAnula = texto.match(/SE ANULA[^\n]{5,}/i);
+      if(mAnula) a.trabajo = mAnula[0].replace(/\s*NODEF.*/i,'').trim().substring(0,120);
+      else if(mSust) a.trabajo = mSust[0].replace(/\s*NODEF.*/i,'').trim().substring(0,120);
+      else if(mLibre) a.trabajo = mLibre[1].replace(/\s*NODEF.*/i,'').trim().substring(0,100);
+      else if(mProblema) a.trabajo = mProblema[0].trim().substring(0,100);
+      else if(mTipo) a.trabajo = mTipo[1].trim();
+    }
   }
 
   // ── CLIENTE ───────────────────────────────────────────────
@@ -2058,6 +2213,9 @@ function parsearBloque(texto){
     else if(/SPRINTER|ESPRINTER/i.test(raw)) a.cliente='Sprinter';
     else if(/REPSOL/i.test(raw)) a.cliente='Repsol';
     else if(/PLENERGY/i.test(raw)) a.cliente='Plenergy';
+    else if(/SOLVIA/i.test(raw)) a.cliente='Solvia';
+    else if(/CAMPSA/i.test(raw)) a.cliente='Campsa';
+    else if(/DIA RETAIL|\bDIA\b/i.test(raw)) a.cliente='Supermercados Día';
     else if(/\bDIA\b/i.test(raw)) a.cliente='Supermercados Día';
     else {
       // Tomar máx 3 palabras, limpiar S.L., S.A., etc.
@@ -2074,8 +2232,19 @@ function parsearBloque(texto){
 
   // Sistema
   if(/P\.C\.I\.|TRIMESTRAL.*PCI|PCI/i.test(texto) && !/SEGURIDAD/i.test(texto)) a.sistema='PCI';
+  else if(/INSTALACIÓN|INSTALACION/i.test(texto) && /SEGURIDAD/i.test(texto)) a.sistema='INST';
   else if(/SEGURIDAD|\.SEG\b/i.test(texto)) a.sistema='SEG';
   else if(/CCTV|GRABADOR|CÁMARA/i.test(texto)) a.sistema='CCTV';
+
+  // ── HORA FIJADA (Solvia y otros) ─────────────────────────
+  if(!a.horaFijada){
+    const horaHsM = texto.match(/(\d{1,2}:\d{2})\s*hs/i);
+    if(horaHsM) a.horaFijada = horaHsM[1];
+  }
+
+  // ── CONTACTO PROPIETARIO (Solvia) ─────────────────────────
+  const contactoM = texto.match(/(?:NASIR|Mariam|CARLOS|propietario)[^\n]*(?:Movil|móvil|\d{9})[^\n]*/i);
+  if(contactoM) a.contacto = contactoM[0].trim().substring(0,80);
 
   // ── FECHA FIJADA (citas, visitas programadas) ─────────────────
   // Detecta: "17/02/2026 al 18/02/2026 acudir...", "para el día 15/03", "cita el 20/03"
@@ -2875,6 +3044,77 @@ function abrirModalEvento(){
   overlay.classList.add('open');
 }
 
+function abrirNuevaTarea(fechaPre=''){
+  const overlay = document.getElementById('trabajoOverlay');
+  const box = overlay.querySelector('.trabajo-box');
+  box.innerHTML = `
+    <div style="background:var(--accent);padding:14px 16px;border-radius:16px 16px 0 0">
+      <div style="font-weight:800;font-size:14px;color:white">📋 Nueva tarea</div>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <input id="taTex" placeholder="Descripción de la tarea" style="padding:11px;border:1.5px solid var(--border2);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text);font-family:var(--sans)">
+      <div style="display:flex;gap:8px">
+        <input id="taFec" type="date" value="${fechaPre}" style="flex:1;padding:11px;border:1.5px solid var(--border2);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text)">
+        <input id="taHor" type="time" style="flex:1;padding:11px;border:1.5px solid var(--border2);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text)">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="document.getElementById('trabajoOverlay').classList.remove('open')"
+          style="flex:1;padding:11px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;color:var(--text);cursor:pointer">Cancelar</button>
+        <button onclick="confirmarTareaDesdeOverlay()"
+          style="flex:2;padding:11px;background:var(--accent);border:none;border-radius:10px;color:white;font-weight:800;font-size:14px;cursor:pointer">Guardar tarea</button>
+      </div>
+    </div>`;
+  overlay.classList.add('open');
+}
+
+function confirmarTareaDesdeOverlay(){
+  const texto = document.getElementById('taTex')?.value?.trim();
+  const fecha = document.getElementById('taFec')?.value;
+  const hora  = document.getElementById('taHor')?.value;
+  if(!texto){ toast('Escribe la tarea'); return; }
+  tareas.push({ id: Date.now(), texto, fecha, hora });
+  guardarStorage();
+  actualizarBadgeTareas();
+  document.getElementById('trabajoOverlay').classList.remove('open');
+  renderContent();
+  toast('✓ Tarea guardada');
+}
+
+function abrirNuevoEvento(fechaPre=''){
+  const overlay = document.getElementById('trabajoOverlay');
+  const box = overlay.querySelector('.trabajo-box');
+  box.innerHTML = `
+    <div style="background:var(--green);padding:14px 16px;border-radius:16px 16px 0 0">
+      <div style="font-weight:800;font-size:14px;color:white">📅 Nuevo evento</div>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <input id="evTitulo2" placeholder="Título del evento" style="padding:11px;border:1.5px solid var(--border2);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text);font-family:var(--sans)">
+      <div style="display:flex;gap:8px">
+        <input id="evFecha2" type="date" value="${fechaPre}" style="flex:1;padding:11px;border:1.5px solid var(--border2);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text)">
+        <input id="evHora2" type="time" style="flex:1;padding:11px;border:1.5px solid var(--border2);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text)">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="document.getElementById('trabajoOverlay').classList.remove('open')"
+          style="flex:1;padding:11px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;color:var(--text);cursor:pointer">Cancelar</button>
+        <button onclick="confirmarEventoDesdeOverlay()"
+          style="flex:2;padding:11px;background:var(--green);border:none;border-radius:10px;color:white;font-weight:800;font-size:14px;cursor:pointer">Guardar evento</button>
+      </div>
+    </div>`;
+  overlay.classList.add('open');
+}
+
+function confirmarEventoDesdeOverlay(){
+  const titulo = document.getElementById('evTitulo2')?.value?.trim();
+  const fecha  = document.getElementById('evFecha2')?.value;
+  const hora   = document.getElementById('evHora2')?.value;
+  if(!titulo){ toast('Escribe el título'); return; }
+  eventosCalendario.push({ id: Date.now(), titulo, fecha, hora });
+  guardarStorage();
+  document.getElementById('trabajoOverlay').classList.remove('open');
+  renderContent();
+  toast('✓ Evento guardado');
+}
+
 function confirmarEvento(){
   const titulo = document.getElementById('evTitulo')?.value?.trim();
   const fecha  = document.getElementById('evFecha')?.value;
@@ -3213,10 +3453,7 @@ function renderGuardar(c){
 
 
 function apiURL(){
-  // Desde fichero local usa proxy CORS, desde HTTPS directo
-  return location.protocol === 'https:'
-    ? 'https://api.anthropic.com/v1/messages'
-    : 'https://corsproxy.io/?url=https://api.anthropic.com/v1/messages';
+  return PROXY_URL; // Usar siempre el Worker de Cloudflare/Gemini
 }
 
 const CHAT_SYSTEM = 'Eres un asistente técnico especializado en sistemas de seguridad, PCI (protección contra incendios), CCTV y control de accesos. Ayudas a un técnico de campo en Valencia (España) que trabaja con clientes como Cajamar, BBVA, Caixa Rural, Repsol y otros.\n\nTienes acceso a búsqueda web para responder preguntas técnicas actualizadas.\n\nResponde de forma clara, práctica y directa. Cuando des pasos de programación o configuración, usa listas numeradas. Si identificas un equipo por foto, indica modelo, fabricante y características clave.\n\nEl técnico puede enviarte fotos de equipos, pantallas de configuración o instalaciones para que los identifiques o analices.';
@@ -3796,19 +4033,9 @@ async function guardarRespuestaEnInfo(idx){
       .map(m => m.role==='user' ? `Pregunta: ${m.text}` : `Respuesta: ${m.content}`)
       .join('\n\n');
 
-    const resp = await fetch(apiURL(), {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:800,
-        system: GUARDAR_SYSTEM,
-        messages:[{ role:'user', content: contexto + `\n\nFecha de hoy: ${fecha}` }]
-      })
-    });
-    const data = await resp.json();
-    const raw = (data.content||[]).map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(raw);
+    const raw = await claudeChat(GUARDAR_SYSTEM, [{ role:'user', content: contexto + `\n\nFecha de hoy: ${fecha}` }], 800);
+    const rawClean = (raw||'').replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(rawClean);
 
     // Guardar en historial INFO
     const filas = JSON.parse(localStorage.getItem('rt_conocimiento_filas')||'[]');
@@ -3875,28 +4102,14 @@ async function procesarConocimiento(){
     : '';
 
   try {
-    const resp = await fetch(apiURL(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: CONOCIMIENTO_SYSTEM,
-        messages: [{
-          role: 'user',
-          content: _conocImgBase64
-            ? [
-                { type: 'image', source: { type: 'base64', media_type: _conocImgType||'image/jpeg', data: _conocImgBase64 } },
-                { type: 'text', text: (texto || 'Analiza esta imagen y genera la fila para Info2026.') + hint }
-              ]
-            : texto + hint
-        }]
-      })
-    });
-
-    const data = await resp.json();
-    const raw = data.content?.map(i=>i.text||'').join('');
-    const clean = raw.replace(/```json|```/g,'').trim();
+    const msgContent = _conocImgBase64
+      ? [
+          { type: 'image', source: { type: 'base64', media_type: _conocImgType||'image/jpeg', data: _conocImgBase64 } },
+          { type: 'text', text: (texto || 'Analiza esta imagen y genera la fila para Info2026.') + hint }
+        ]
+      : texto + hint;
+    const rawResp = await claudeChat(CONOCIMIENTO_SYSTEM, [{ role:'user', content: msgContent }], 1000);
+    const clean = (rawResp||'').replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
 
     conocimientoResultado = parsed;
@@ -4789,20 +5002,93 @@ function mtoImportarWA(){
 
 
 function copiarContextoCopilot(){
-  const avisos = analisisResultado.filter(a => !a._separador);
-  if(!avisos.length){ toast('Analiza primero los avisos'); return; }
-  const lineas = avisos.map((a,i) =>
-    `${i+1}. ${a.cliente||''} · ${a.oficina||''} · ${a.localidad||''}\n   ${a.trabajo||a.trabajo_desc||'—'}\n   Estado: ${a.estado||'—'}  Aviso: ${a.aviso||'—'}`
-  ).join('\n\n');
-  const texto = `Soy técnico de seguridad Pycseca. Estos son mis avisos de hoy ${getFecha()}:\n\n${lineas}\n\n`;
-  navigator.clipboard.writeText(texto)
-    .then(()=>{ toast('✓ Copiado para Gemini'); window.open('https://gemini.google.com','_blank'); })
-    .catch(()=>{ 
-      // Fallback
+  const avisos = tabla.filter(a => !a._separador);
+
+  // Construir contexto completo
+  let ctx = `Eres el asistente técnico de un técnico de seguridad de Pycseca Valencia.
+Fecha: ${getFecha()}
+`;
+
+  // Avisos del día
+  if(avisos.length > 0){
+    ctx += `\n=== AVISOS DEL DÍA (${avisos.length}) ===\n`;
+    avisos.forEach((a,i) => {
+      ctx += `\n${i+1}. ${a.cliente||''} ${a.oficina||''} · ${a.localidad||''}`;
+      ctx += `\n   Trabajo: ${a.trabajo||a.trabajo_desc||'—'}`;
+      ctx += `\n   Estado: ${a.estado||'Pendiente'} · Sistema: ${a.sistema||'—'}`;
+      // Historial de esa oficina
+      const sistema = String(a.sistema||'').trim();
+      const key = sistema ? 'sis_'+sistema.replace(/\D/g,'') : 'cli_'+(a.cliente||'').toUpperCase().replace(/\s/g,'')+'_'+(a.localidad||'').toUpperCase().replace(/\s/g,'');
+      const hist = historialLocal[key];
+      if(hist && hist.length){
+        const ult = hist[0];
+        ctx += `\n   Última visita: ${ult.fecha} — ${ult.trabajo||'—'}`;
+        if(ult.equipos){
+          const eq = Object.entries(ult.equipos).filter(([,v])=>v).map(([k,v])=>`${k}:${v}`).join(', ');
+          if(eq) ctx += `\n   Equipos conocidos: ${eq}`;
+        }
+      }
+    });
+  } else {
+    ctx += `\n(Sin avisos cargados hoy)`;
+  }
+
+  // Info2026 relevante
+  if(infoDB && infoDB.length){
+    ctx += `\n\n=== INFORMACIÓN TÉCNICA (Info2026) ===\n`;
+    infoDB.slice(0,15).forEach(r => {
+      ctx += `\n- ${r.Entidad||''} | ${r.Sistema||r['Sistema/Equipo']||''} | ${(r.Info||r['Información/Detalle']||'').substring(0,120)}`;
+    });
+  }
+
+  if(infoTecDB && infoTecDB.length){
+    ctx += `\n\n=== PROCEDIMIENTOS TÉCNICOS ===\n`;
+    infoTecDB.slice(0,10).forEach(r => {
+      ctx += `\n- ${r.Entidad||''} | ${r.Sistema||''} | ${(r.Info||'').substring(0,120)}`;
+    });
+  }
+
+  ctx += `\n\n---\nResponde siempre en español. Puedes preguntarme sobre cualquier aviso, equipo o procedimiento.`;
+
+  // Guardar contexto en variable global para evitar problemas con caracteres especiales
+  window._geminiCtx = ctx;
+
+  // Mostrar overlay con el contexto y botón para copiar+abrir
+  const overlay = document.getElementById('trabajoOverlay');
+  const box = overlay.querySelector('.trabajo-box');
+  box.innerHTML = `
+    <div style="background:linear-gradient(135deg,#1a73e8,#1557b0);padding:14px 16px;border-radius:16px 16px 0 0">
+      <div style="font-weight:800;font-size:14px;color:white">✦ Abrir Gemini con contexto</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:2px">Tu jornada + historial + Info2026</div>
+    </div>
+    <div style="padding:14px 16px">
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;padding:10px;max-height:180px;overflow-y:auto;white-space:pre-wrap;font-family:var(--mono);font-size:11px">${ctx.substring(0,800).replace(/</g,'&lt;')}...</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">Se copiará todo el contexto al portapapeles</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="document.getElementById('trabajoOverlay').classList.remove('open')"
+          style="flex:1;padding:11px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:10px;font-weight:700;color:var(--text);cursor:pointer">Cancelar</button>
+        <button onclick="abrirGeminiConContexto(window._geminiCtx)"
+          style="flex:2;padding:11px;background:linear-gradient(135deg,#1a73e8,#1557b0);border:none;border-radius:10px;color:white;font-weight:800;font-size:14px;cursor:pointer">
+          ✦ Copiar y abrir Gemini
+        </button>
+      </div>
+    </div>`;
+  overlay.classList.add('open');
+}
+
+function abrirGeminiConContexto(ctx){
+  navigator.clipboard.writeText(ctx)
+    .then(()=>{ 
+      toast('✓ Contexto copiado — pega en Gemini');
+      document.getElementById('trabajoOverlay').classList.remove('open');
+      window.open('https://gemini.google.com','_blank');
+    })
+    .catch(()=>{
       const ta = document.createElement('textarea');
-      ta.value = texto; document.body.appendChild(ta); ta.select();
+      ta.value = ctx; document.body.appendChild(ta); ta.select();
       document.execCommand('copy'); document.body.removeChild(ta);
-      toast('✓ Copiado para Gemini');
+      toast('✓ Contexto copiado — pega en Gemini');
+      document.getElementById('trabajoOverlay').classList.remove('open');
       window.open('https://gemini.google.com','_blank');
     });
 }
@@ -5082,7 +5368,25 @@ function renderCalendarioModal(diaSeleccionado=null){
       </div>
 
       <!-- Detalle del día seleccionado -->
-      ${diaSeleccionado ? renderCalDetalle(diaSeleccionado) : '<div style="padding:12px 18px;color:var(--text3);font-size:13px;text-align:center">Toca un día para ver detalles</div>'}
+      ${diaSeleccionado ? renderCalDetalle(diaSeleccionado) : `
+        <div style="padding:10px 14px 4px;color:var(--text3);font-size:12px;text-align:center">
+          ${Object.keys(marcas).filter(k=>k.startsWith(_calAnyo+'-'+String(_calMes+1).padStart(2,'0'))).length > 0
+            ? Object.keys(marcas).filter(k=>k.startsWith(_calAnyo+'-'+String(_calMes+1).padStart(2,'0'))).length + ' día' + (Object.keys(marcas).filter(k=>k.startsWith(_calAnyo+'-'+String(_calMes+1).padStart(2,'0'))).length>1?'s':'') + ' con eventos este mes'
+            : 'Sin eventos este mes · Toca un día'}
+        </div>`}
+
+      <!-- Botón añadir en día seleccionado -->
+      ${diaSeleccionado ? `
+        <div style="padding:0 12px 8px;display:flex;gap:8px">
+          <button onclick="cerrarCalendario();abrirNuevaTarea('${diaSeleccionado}')"
+            style="flex:1;padding:10px;background:var(--accent-light);border:1.5px solid var(--accent);border-radius:10px;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer">
+            + Tarea
+          </button>
+          <button onclick="cerrarCalendario();abrirNuevoEvento('${diaSeleccionado}')"
+            style="flex:1;padding:10px;background:#f0fdf4;border:1.5px solid var(--green);border-radius:10px;color:var(--green);font-weight:700;font-size:12px;cursor:pointer">
+            + Evento
+          </button>
+        </div>` : ''}
 
       <!-- Cerrar -->
       <div style="padding:0 12px 14px">
@@ -5125,6 +5429,78 @@ function renderCalDetalle(iso){
   });
   h += '</div>';
   return h;
+}
+
+
+function mostrarResumenHistorial(){
+  const overlay = document.getElementById('trabajoOverlay');
+  const box = overlay.querySelector('.trabajo-box');
+
+  // Obtener todas las oficinas ordenadas por última visita
+  const oficinas = Object.entries(historialLocal)
+    .map(([key, visitas]) => ({
+      key,
+      visitas: visitas.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'')),
+      ultima: visitas[0]
+    }))
+    .sort((a,b) => (b.ultima?.fecha||'').localeCompare(a.ultima?.fecha||''));
+
+  let h = `
+    <div style="background:var(--accent);padding:14px 16px;border-radius:16px 16px 0 0;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-weight:800;font-size:14px;color:white">📱 Historial de visitas</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:2px">${oficinas.length} oficinas · ${Object.values(historialLocal).reduce((s,v)=>s+v.length,0)} visitas</div>
+      </div>
+      <button onclick="document.getElementById('trabajoOverlay').classList.remove('open')"
+        style="background:rgba(255,255,255,0.2);border:none;border-radius:8px;width:32px;height:32px;color:white;font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div style="max-height:65vh;overflow-y:auto;padding:10px 14px 14px">`;
+
+  oficinas.forEach(({key, visitas, ultima}) => {
+    const cc = getColorCliente(ultima?.cliente||'');
+    const equipos = ultima?.equipos || {};
+    const eqTexto = [
+      equipos.central ? `🔲 ${equipos.central}${equipos.centralModelo?' '+equipos.centralModelo:''}` : '',
+      equipos.grabador ? `📹 ${equipos.grabador}${equipos.grabadorModelo?' '+equipos.grabadorModelo:''}` : '',
+      equipos.incendio ? `🔥 ${equipos.incendio}` : '',
+      equipos.acceso   ? `🚪 ${equipos.acceso}` : ''
+    ].filter(Boolean).join('  ');
+
+    h += `<div style="border:1.5px solid ${cc.border};border-radius:10px;margin-bottom:8px;overflow:hidden">
+      <div style="background:${cc.bg};padding:8px 12px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <span style="font-size:12px;font-weight:800;color:${cc.border}">${ultima?.cliente||'—'}</span>
+          <span style="font-size:11px;color:var(--text2);margin-left:6px">${ultima?.localidad||''}</span>
+        </div>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">${visitas.length} visita${visitas.length>1?'s':''}</span>
+      </div>
+      ${eqTexto ? `<div style="padding:6px 12px;font-size:11px;color:var(--text2);background:var(--bg2);border-top:1px solid var(--border)">${eqTexto}</div>` : ''}
+      <div style="padding:6px 12px 8px">
+        ${visitas.slice(0,3).map(v => `
+          <div style="display:flex;align-items:baseline;gap:8px;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text3);white-space:nowrap">${v.fecha||'—'}</span>
+            <span style="font-size:12px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.trabajo||'—'}</span>
+            <span style="font-size:10px;color:${v.estado==='Finalizado'?'#16a34a':'#d97706'};font-weight:700">${v.estado==='Finalizado'?'✓':'⏸'}</span>
+          </div>`).join('')}
+        ${visitas.length > 3 ? `<div style="font-size:10px;color:var(--text3);margin-top:4px">+ ${visitas.length-3} visita${visitas.length-3>1?'s':''} más</div>` : ''}
+      </div>
+    </div>`;
+  });
+
+  if(oficinas.length === 0){
+    h += `<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">
+      Sin historial todavía<br><span style="font-size:11px">Se llena al cerrar avisos</span>
+    </div>`;
+  }
+
+  h += `</div>
+    <div style="padding:0 14px 14px">
+      <button onclick="document.getElementById('trabajoOverlay').classList.remove('open')"
+        style="width:100%;padding:12px;background:var(--bg2);border:2px solid var(--border2);border-radius:10px;font-weight:700;color:var(--text);cursor:pointer">Cerrar</button>
+    </div>`;
+
+  box.innerHTML = h;
+  overlay.classList.add('open');
 }
 
 function cerrarCalendario(){
@@ -6306,6 +6682,24 @@ function actualizarBadgeTareas(){
   } else {
     badge.style.display = 'none';
   }
+}
+
+
+function crearEventoFinMes(){
+  // Crear recordatorio el último día de cada mes si no existe ya
+  const hoy = new Date();
+  const anyo = hoy.getFullYear();
+  // Meses restantes del año
+  for(let mes = hoy.getMonth(); mes < 12; mes++){
+    const ultimoDia = new Date(anyo, mes+1, 0);
+    const iso = ultimoDia.getFullYear()+'-'+String(ultimoDia.getMonth()+1).padStart(2,'0')+'-'+String(ultimoDia.getDate()).padStart(2,'0');
+    const titulo = '📁 Actualizar archivos Info2026';
+    const yaExiste = eventosCalendario.some(e => e.fecha === iso && e.titulo === titulo);
+    if(!yaExiste){
+      eventosCalendario.push({ id: Date.now()+mes, titulo, fecha: iso, hora: '17:00', auto: true });
+    }
+  }
+  guardarStorage();
 }
 
 function mostrarAlertaArranque(){
